@@ -8,7 +8,7 @@ import com.kmp.setplay.domain.model.Round
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 // ── Tournament ────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,6 @@ fun Round.toEntity() = RoundEntity(
 )
 
 // ── Match ─────────────────────────────────────────────────────────────────────
-
 fun MatchEntity.toDomain() = Match(
     id = id,
     roundId = roundId,
@@ -114,7 +113,6 @@ fun Match.toEntity() = MatchEntity(
 )
 
 // ── Standing ──────────────────────────────────────────────────────────────────
-
 fun StandingEntity.toDomain() = Standing(
     id = id,
     tournamentId = tournamentId,
@@ -142,7 +140,6 @@ fun Standing.toEntity() = StandingEntity(
 )
 
 // ── Announcement ──────────────────────────────────────────────────────────────
-
 fun AnnouncementEntity.toDomain() = Announcement(
     id = id,
     tournamentId = tournamentId,
@@ -160,7 +157,6 @@ fun Announcement.toEntity() = AnnouncementEntity(
 )
 
 // ── DeviceToken ───────────────────────────────────────────────────────────────
-
 fun DeviceTokenEntity.toDomain() = DeviceToken(
     id = id,
     userId = userId,

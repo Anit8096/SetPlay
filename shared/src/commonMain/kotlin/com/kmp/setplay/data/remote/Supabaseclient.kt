@@ -2,6 +2,7 @@ package com.kmp.setplay.data.remote
 
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.SettingsSessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
@@ -12,6 +13,7 @@ import io.github.jan.supabase.functions.Functions
 expect fun provideSupabaseUrl(): String
 expect fun provideSupabaseKey(): String
 
+
 fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
     supabaseUrl = provideSupabaseUrl(),
     supabaseKey = provideSupabaseKey()
@@ -19,9 +21,17 @@ fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
     install(Auth) {
         alwaysAutoRefresh = true
         autoLoadFromStorage = true
+        sessionManager = SettingsSessionManager()
     }
     install(Postgrest)
     install(Realtime)
     install(Storage)
     install(Functions)
 }
+
+/**
+ * On web, Supabase OAuth redirects back with session tokens in the URL hash.
+ * This function parses that hash and imports the session into the Supabase client.
+ * On Android, OAuth is handled natively and this is a no-op.
+ */
+expect suspend fun parseSessionFromUrl()

@@ -7,7 +7,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 
 lateinit var appContext: Context
 
-actual fun getDatabaseBuilder(): RoomDatabase.Builder<SetPlayDatabase> {
+fun getDatabaseBuilder(): RoomDatabase.Builder<SetPlayDatabase> {
     val dbFile = appContext.getDatabasePath("setplay.db")
     return Room.databaseBuilder<SetPlayDatabase>(
         context = appContext,

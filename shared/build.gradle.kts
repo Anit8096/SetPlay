@@ -95,16 +95,19 @@ kotlin {
             // QR generation
             implementation(libs.qrose)
         }
-        webMain.dependencies {
-            implementation(libs.ktor.client.js)
-            implementation(libs.sqlite.web)
-        }
+
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        webMain.dependencies {
+            implementation(libs.ktor.client.js)
+        }
+
         jsMain.dependencies {
+            implementation(libs.ktor.client.js)
             implementation(libs.wrappers.browser)
         }
+        wasmJsMain.dependencies {}
     }
 }
 
@@ -118,8 +121,6 @@ dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
     add("kspCommonMainMetadata", libs.room.compiler)
     add("kspAndroid", libs.room.compiler)
-    add("kspJs", libs.room.compiler)
-    add("kspWasmJs", libs.room.compiler)
 }
 
 buildkonfig {

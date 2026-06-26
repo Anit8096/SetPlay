@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -31,10 +32,17 @@ import com.kmp.setplay.presentation.auth.AuthAction
 import com.kmp.setplay.presentation.auth.AuthViewModel
 import com.kmp.setplay.presentation.auth.LinkAccountBanner
 import com.kmp.setplay.presentation.auth.SignInScreen
+import com.kmp.setplay.presentation.tournament.create.CreateTournamentScreen
+import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
+import com.kmp.setplay.presentation.tournament.detail.TournamentDetailScreen
+import com.kmp.setplay.presentation.tournament.detail.TournamentDetailViewModel
+import com.kmp.setplay.presentation.tournament.join.JoinTournamentScreen
+import com.kmp.setplay.presentation.tournament.join.JoinTournamentViewModel
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
@@ -79,46 +87,6 @@ fun NavGraph() {
             ),
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
-            entryProvider = entryProvider {
-                entry<Route.SignIn> {
-                    SignInScreen(
-                        state = authState,
-                        onAction = authViewModel::onAction
-                    )
-                }
-
-                entry<Route.Home> {
-                    HomeScreenPlaceholder(
-                        isAnonymous = authState.isAnonymous,
-                        onCreateTournament = { backStack.add(Route.CreateTournament) },
-                        onJoin = { backStack.add(Route.JoinTournament()) },
-                        onSettings = { backStack.add(Route.Settings) },
-                        onLinkGoogle = { authViewModel.onAction(AuthAction.LinkGoogle) },
-                        onSignOut = { authViewModel.onAction(AuthAction.SignOut) }
-                    )
-                }
-
-                entry<Route.CreateTournament> {
-                    // Phase 1 — wired up when CreateTournamentScreen is built
-                    PlaceholderScreen("Create Tournament") { backStack.removeLastOrNull() }
-                }
-
-                entry<Route.TournamentDetail> { route ->
-                    // route.tournamentId available here
-                    PlaceholderScreen("Tournament: ${route.tournamentId}") {
-                        backStack.removeLastOrNull()
-                    }
-                }
-
-                entry<Route.JoinTournament> { route ->
-                    // route.inviteCode pre-filled if launched from deep link
-                    PlaceholderScreen("Join Tournament") { backStack.removeLastOrNull() }
-                }
-
-                entry<Route.Settings> {
-                    PlaceholderScreen("Settings") { backStack.removeLastOrNull() }
-                }
-            },
             transitionSpec = {
                 slideInHorizontally(initialOffsetX = { it })
                     .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
@@ -130,18 +98,86 @@ fun NavGraph() {
             predictivePopTransitionSpec = {
                 slideInHorizontally(initialOffsetX = { -it })
                     .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+            },
+            entryProvider = entryProvider {
+                entry<Route.SignIn> {
+                    SignInScreen(
+                        state = authState,
+                        onAction = authViewModel::onAction
+                    )
+                }
+
+                entry<Route.Home> {
+                    HomeScreen(
+                        isAnonymous = authState.isAnonymous,
+                        onCreateTournament = { backStack.add(Route.CreateTournament) },
+                        onJoin = { backStack.add(Route.JoinTournament()) },
+                        onLinkGoogle = { authViewModel.onAction(AuthAction.LinkGoogle) },
+                        onSignOut = { authViewModel.onAction(AuthAction.SignOut) }
+                    )
+                }
+
+                entry<Route.CreateTournament> {
+                    val vm: CreateTournamentViewModel = koinViewModel()
+                    val state by vm.uiState.collectAsStateWithLifecycle()
+                    CreateTournamentScreen(
+                        state = state,
+                        onAction = vm::onAction,
+                        onCreated = { tournament ->
+                            backStack.removeLastOrNull()
+                            backStack.add(Route.TournamentDetail(tournament.id))
+                        },
+                        onBack = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<Route.TournamentDetail> { route ->
+                    val vm: TournamentDetailViewModel = koinViewModel(
+                        parameters = { parametersOf(route.tournamentId) }
+                    )
+                    val state by vm.uiState.collectAsStateWithLifecycle()
+                    TournamentDetailScreen(
+                        state = state,
+                        onAction = vm::onAction,
+                        onBack = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<Route.JoinTournament> { route ->
+                    val vm: JoinTournamentViewModel = koinViewModel(
+                        parameters = { parametersOf(route.inviteCode) }
+                    )
+                    val state by vm.uiState.collectAsStateWithLifecycle()
+                    JoinTournamentScreen(
+                        state = state,
+                        onAction = vm::onAction,
+                        onTournamentFound = { tournament ->
+                            backStack.removeLastOrNull()
+                            backStack.add(Route.TournamentDetail(tournament.id))
+                        },
+                        onBack = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<Route.Settings> {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text("Settings — Phase 2")
+                    }
+                }
             }
         )
     }
 }
 
-// Placeholder screens (removed once real screens are built in Phase 1) ──────
+// Temporary Home Screen
 @Composable
-private fun HomeScreenPlaceholder(
+private fun HomeScreen(
     isAnonymous: Boolean,
     onCreateTournament: () -> Unit,
     onJoin: () -> Unit,
-    onSettings: () -> Unit,
     onLinkGoogle: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -155,27 +191,20 @@ private fun HomeScreenPlaceholder(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(24.dp)
             ) {
                 Text("SetPlay", style = MaterialTheme.typography.displaySmall)
-                Button(onClick = onCreateTournament) { Text("Create tournament") }
-                OutlinedButton(onClick = onJoin) { Text("Join tournament") }
-                OutlinedButton(onClick = onSettings) { Text("Settings") }
-                OutlinedButton(onClick = onSignOut) { Text("Sign out") }
+                Button(onClick = onCreateTournament, modifier = Modifier.fillMaxWidth()) {
+                    Text("Create tournament")
+                }
+                OutlinedButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
+                    Text("Join tournament")
+                }
+                OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                    Text("Sign out")
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(title: String, onBack: () -> Unit) {
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.headlineMedium)
-            OutlinedButton(onClick = onBack) { Text("← Back") }
         }
     }
 }
