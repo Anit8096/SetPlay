@@ -23,21 +23,22 @@ class AuthRepositoryImpl(
         status is SessionStatus.Authenticated
     }
 
+    override val isAnonymous: Flow<Boolean> = supabase.auth.sessionStatus.map { status ->
+        when (status) {
+            is SessionStatus.Authenticated -> status.session.user?.isAnonymous ?: false
+            else -> false
+        }
+    }
+
     override suspend fun signInAnonymously(): Result<Unit> = runCatching {
         supabase.auth.signInAnonymously()
     }
 
     override suspend fun signInWithGoogle(): Result<Unit> = runCatching {
-        // OAuthProvider.signIn triggers the platform OAuth flow.
-        // On Android with compose-auth, this is handled via the GoogleAuthButton
-        // composable in the UI layer — this function covers the Web path and
-        // any direct SDK usage.
         supabase.auth.signInWith(Google)
     }
 
     override suspend fun linkGoogle(): Result<Unit> = runCatching {
-        // Links the existing anonymous session to a Google identity.
-        // The user keeps all tournament data they created while anonymous.
         supabase.auth.linkIdentity(Google)
     }
 
@@ -45,3 +46,5 @@ class AuthRepositoryImpl(
         supabase.auth.signOut()
     }
 }
+
+expect fun getOAuthRedirectUrl(): String

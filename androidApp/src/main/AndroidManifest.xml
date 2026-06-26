@@ -10,11 +10,27 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:exported="true"
-            android:name=".MainActivity">
+            android:name=".MainActivity"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                Custom scheme deep link for OAuth redirect.
+                autoVerify is NOT used here — that's only for http/https App Links.
+                Custom schemes (setplay://) don't need verification.
+                Add "setplay://login-callback" in Supabase Dashboard →
+                Auth → URL Configuration → Redirect URLs.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="setplay"
+                    android:host="login-callback" />
             </intent-filter>
         </activity>
     </application>

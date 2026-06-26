@@ -22,6 +22,8 @@ fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
         alwaysAutoRefresh = true
         autoLoadFromStorage = true
         sessionManager = SettingsSessionManager()
+        scheme = "setplay"
+        host = "login-callback"
     }
     install(Postgrest)
     install(Realtime)

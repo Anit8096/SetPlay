@@ -9,26 +9,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// ── State ─────────────────────────────────────────────────────────────────────
 data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
-    /** True once a session (any kind) has been established. */
     val isAuthenticated: Boolean = false,
-    /** True when the current user is anonymous (can be upgraded). */
     val isAnonymous: Boolean = false
 )
 
-// ── Actions ───────────────────────────────────────────────────────────────────
 sealed interface AuthAction {
     data object SignInAnonymously : AuthAction
     data object SignInWithGoogle  : AuthAction
     data object LinkGoogle        : AuthAction
     data object SignOut           : AuthAction
     data object DismissError      : AuthAction
+    data class  SetError(val message: String) : AuthAction  // used by GoogleSignInButton.android.kt
 }
 
-// ── ViewModel ─────────────────────────────────────────────────────────────────
 class AuthViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
@@ -37,10 +33,14 @@ class AuthViewModel(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
-        // Keep authentication state in sync with the Supabase session.
         viewModelScope.launch {
             authRepository.isLoggedIn.collect { loggedIn ->
                 _uiState.update { it.copy(isAuthenticated = loggedIn) }
+            }
+        }
+        viewModelScope.launch {
+            authRepository.isAnonymous.collect { anonymous ->
+                _uiState.update { it.copy(isAnonymous = anonymous) }
             }
         }
     }
@@ -52,6 +52,7 @@ class AuthViewModel(
             AuthAction.LinkGoogle        -> linkGoogle()
             AuthAction.SignOut           -> signOut()
             AuthAction.DismissError      -> _uiState.update { it.copy(error = null) }
+            is AuthAction.SetError       -> _uiState.update { it.copy(error = action.message) }
         }
     }
 
@@ -79,7 +80,6 @@ class AuthViewModel(
         }
     }
 
-    /** Convenience wrapper that sets isLoading around the suspend block. */
     private fun launch(block: suspend () -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }

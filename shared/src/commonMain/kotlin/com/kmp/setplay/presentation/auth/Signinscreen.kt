@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,14 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/**
- * Stateless sign-in screen. State is owned by [AuthViewModel] and delivered
- * here as a plain [AuthUiState]. All user intent is emitted via [onAction].
- *
- * The screen intentionally knows nothing about navigation — the caller
- * (NavHost in App.kt) observes [AuthUiState.isAuthenticated] and performs
- * the push to HomeScreen when it becomes true.
- */
 @Composable
 fun SignInScreen(
     state: AuthUiState,
@@ -44,7 +35,6 @@ fun SignInScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Show errors via snackbar and dismiss from state once shown.
     LaunchedEffect(state.error) {
         state.error?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -69,7 +59,6 @@ fun SignInScreen(
                     .widthIn(max = 360.dp)
                     .padding(horizontal = 24.dp)
             ) {
-                // ── Brand mark ────────────────────────────────────────────
                 Text(
                     text = "SetPlay",
                     style = MaterialTheme.typography.displayMedium,
@@ -84,24 +73,15 @@ fun SignInScreen(
 
                 Spacer(Modifier.height(32.dp))
 
-                // ── Google sign-in ────────────────────────────────────────
-                OutlinedButton(
-                    onClick = { onAction(AuthAction.SignInWithGoogle) },
-                    enabled = !state.isLoading,
+                // Android → native Credential Manager (compose-auth)
+                // Web    → browser OAuth flow
+                GoogleSignInButton(
+                    isLoading = state.isLoading,
+                    onFallback = { onAction(AuthAction.SignInWithGoogle) },
+                    onError = { onAction(AuthAction.SetError(it)) },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    AnimatedVisibility(state.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .padding(end = 8.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                    Text("Continue with Google")
-                }
+                )
 
-                // ── Anonymous / guest ─────────────────────────────────────
                 TextButton(
                     onClick = { onAction(AuthAction.SignInAnonymously) },
                     enabled = !state.isLoading,
@@ -123,11 +103,6 @@ fun SignInScreen(
     }
 }
 
-/**
- * Upgrade banner shown inside the app when the current user is anonymous.
- * Place this at the top of any screen that benefits from account persistence
- * (e.g., MyTournamentsScreen).
- */
 @Composable
 fun LinkAccountBanner(
     onLinkGoogle: () -> Unit,

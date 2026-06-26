@@ -82,7 +82,7 @@ kotlin {
             implementation(libs.ktor.serialization.json)
 
             // Supabase
-            implementation(libs.supabase.auth)
+            api(libs.supabase.auth)
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.realtime)
             implementation(libs.supabase.storage)
