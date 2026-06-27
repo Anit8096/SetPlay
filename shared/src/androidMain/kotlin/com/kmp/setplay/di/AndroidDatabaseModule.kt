@@ -1,5 +1,7 @@
 package com.kmp.setplay.di
 
+import com.kmp.setplay.data.local.LocalCache
+import com.kmp.setplay.data.local.RoomLocalCache
 import com.kmp.setplay.data.local.db.SetPlayDatabase
 import com.kmp.setplay.data.local.db.getDatabaseBuilder
 import org.koin.dsl.module
@@ -14,5 +16,17 @@ import org.koin.dsl.module
 val androidDatabaseModule = module {
     single<SetPlayDatabase> {
         getDatabaseBuilder().build()
+    }
+
+    single<LocalCache> {
+        val db = get<SetPlayDatabase>()
+        RoomLocalCache(
+            tournamentDao = db.tournamentDao(),
+            teamDao = db.teamDao(),
+            roundDao = db.roundDao(),
+            matchDao = db.matchDao(),
+            standingDao = db.standingDao(),
+            announcementDao = db.announcementDao()
+        )
     }
 }

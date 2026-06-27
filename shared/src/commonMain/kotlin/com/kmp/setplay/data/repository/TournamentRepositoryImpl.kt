@@ -1,12 +1,17 @@
 package com.kmp.setplay.data.repository
 
 import com.kmp.setplay.data.local.LocalCache
+import com.kmp.setplay.data.remote.dto.AdvanceWinnerRequestDto
 import com.kmp.setplay.data.remote.dto.AnnouncementDto
+import com.kmp.setplay.data.remote.dto.InsertTeamRequestDto
+import com.kmp.setplay.data.remote.dto.InsertTournamentRequestDto
 import com.kmp.setplay.data.remote.dto.MatchDto
 import com.kmp.setplay.data.remote.dto.RoundDto
 import com.kmp.setplay.data.remote.dto.StandingDto
 import com.kmp.setplay.data.remote.dto.TeamDto
 import com.kmp.setplay.data.remote.dto.TournamentDto
+import com.kmp.setplay.data.remote.dto.UpdateMatchResultRequestDto
+import com.kmp.setplay.data.remote.dto.UpdateTournamentRequestDto
 import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
 import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.BracketFormat
@@ -44,7 +49,6 @@ class TournamentRepositoryImpl(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // ── Tournaments ───────────────────────────────────────────────────────────
-
     override fun observeMyTournaments(userId: String): Flow<List<Tournament>> {
         scope.launch { subscribeToTournaments(userId) }
         return cache.observeMyTournaments(userId).onStart {
@@ -108,15 +112,18 @@ class TournamentRepositoryImpl(
         val userId = supabase.auth.currentUserOrNull()?.id
             ?: error("Not authenticated")
 
+        // Inside createTournament():
+        val request = InsertTournamentRequestDto(
+            name = name,
+            format = format, // Pass the enum directly!
+            status = TournamentStatus.DRAFT,
+            createdBy = userId,
+            maxTeams = maxTeams,
+            isPublic = isPublic
+        )
+
         val dto = supabase.postgrest["tournaments"]
-            .insert(mapOf(
-                "name" to name,
-                "format" to format.name,
-                "status" to TournamentStatus.DRAFT.name,
-                "created_by" to userId,
-                "max_teams" to maxTeams,
-                "is_public" to isPublic
-            )) { select() }
+            .insert(request) { select() }
             .decodeSingle<TournamentDto>()
 
         val domain = dto.toDomain()
@@ -125,13 +132,15 @@ class TournamentRepositoryImpl(
     }
 
     override suspend fun updateTournament(tournament: Tournament): Result<Unit> = runCatching {
+        val request = UpdateTournamentRequestDto(
+            name = tournament.name,
+            status = tournament.status,
+            isPublic = tournament.isPublic,
+            maxTeams = tournament.maxTeams
+        )
+
         supabase.postgrest["tournaments"]
-            .update(mapOf(
-                "name" to tournament.name,
-                "status" to tournament.status.name,
-                "is_public" to tournament.isPublic,
-                "max_teams" to tournament.maxTeams
-            )) { filter { eq("id", tournament.id) } }
+            .update(request) { filter { eq("id", tournament.id) } }
         cache.saveTournament(tournament)
     }
 
@@ -158,12 +167,14 @@ class TournamentRepositoryImpl(
         name: String,
         seed: Int?
     ): Result<Team> = runCatching {
+        val request = InsertTeamRequestDto(
+            tournamentId = tournamentId,
+            name = name,
+            seed = seed
+        )
+
         val dto = supabase.postgrest["teams"]
-            .insert(mapOf(
-                "tournament_id" to tournamentId,
-                "name" to name,
-                "seed" to seed
-            )) { select() }
+            .insert(request) { select() }
             .decodeSingle<TeamDto>()
 
         val domain = dto.toDomain()
@@ -177,7 +188,6 @@ class TournamentRepositoryImpl(
     }
 
     // ── Join ──────────────────────────────────────────────────────────────────
-
     override suspend fun getTournamentByInviteCode(code: String): Result<Tournament> =
         runCatching {
             cache.getTournamentByInviteCode(code) ?: run {
@@ -191,7 +201,6 @@ class TournamentRepositoryImpl(
         }
 
     // ── Bracket ───────────────────────────────────────────────────────────────
-
     override suspend fun generateBracket(tournamentId: String): Result<Unit> = runCatching {
         val teams = supabase.postgrest["teams"]
             .select { filter { eq("tournament_id", tournamentId) } }
@@ -206,31 +215,40 @@ class TournamentRepositoryImpl(
             idGenerator = { Uuid.random().toString() }
         )
 
-        supabase.postgrest["rounds"].insert(result.rounds.map { round ->
-            mapOf(
-                "id" to round.id,
-                "tournament_id" to round.tournamentId,
-                "round_number" to round.roundNumber,
-                "name" to round.name
+        // 1. Map and Insert Rounds using the strictly typed RoundDto
+        val roundDtos = result.rounds.map { round ->
+            RoundDto(
+                id = round.id,
+                tournamentId = round.tournamentId,
+                roundNumber = round.roundNumber,
+                name = round.name
             )
-        })
+        }
+        supabase.postgrest["rounds"].insert(roundDtos)
         cache.saveRounds(result.rounds)
 
-        supabase.postgrest["matches"].insert(result.matches.map { match ->
-            buildMap<String, Any?> {
-                put("id", match.id)
-                put("round_id", match.roundId)
-                put("tournament_id", match.tournamentId)
-                put("match_number", match.matchNumber)
-                put("team1_id", match.team1Id)
-                put("team2_id", match.team2Id)
-                put("status", match.status.name)
-                put("next_match_id", match.nextMatchId)
-                put("winner_id", match.winnerId)
-            }
-        })
+        // 2. Map and Insert Matches using the strictly typed MatchDto
+        val matchDtos = result.matches.map { match ->
+            MatchDto(
+                id = match.id,
+                roundId = match.roundId,
+                tournamentId = match.tournamentId,
+                matchNumber = match.matchNumber,
+                team1Id = match.team1Id,
+                team2Id = match.team2Id,
+                score1 = match.score1,
+                score2 = match.score2,
+                status = match.status,
+                nextMatchId = match.nextMatchId,
+                nextLoserMatchId = match.nextLoserMatchId,
+                winnerId = match.winnerId,
+                loserId = match.loserId
+            )
+        }
+        supabase.postgrest["matches"].insert(matchDtos)
         cache.saveMatches(result.matches)
 
+        // Update tournament status
         supabase.postgrest["tournaments"]
             .update(mapOf("status" to TournamentStatus.IN_PROGRESS.name)) {
                 filter { eq("id", tournamentId) }
@@ -259,18 +277,21 @@ class TournamentRepositoryImpl(
             status = MatchStatus.COMPLETED
         )
 
+        // 1. Update the completed match
+        val matchRequest = UpdateMatchResultRequestDto(
+            score1 = score1,
+            score2 = score2,
+            winnerId = winnerId,
+            loserId = loserId,
+            status = MatchStatus.COMPLETED
+        )
+
         supabase.postgrest["matches"]
-            .update(mapOf(
-                "score1" to score1,
-                "score2" to score2,
-                "winner_id" to winnerId,
-                "loser_id" to loserId,
-                "status" to MatchStatus.COMPLETED.name
-            )) { filter { eq("id", matchId) } }
+            .update(matchRequest) { filter { eq("id", matchId) } }
 
         cache.saveMatch(updatedMatch)
 
-        // Advance winner to next match
+        // 2. Advance winner to next match
         val allMatches = supabase.postgrest["matches"]
             .select { filter { eq("tournament_id", updatedMatch.tournamentId) } }
             .decodeList<MatchDto>()
@@ -278,17 +299,19 @@ class TournamentRepositoryImpl(
 
         SingleEliminationGenerator.advanceWinner(updatedMatch, allMatches)
             .forEach { nextMatch ->
+                val advanceRequest = AdvanceWinnerRequestDto(
+                    team1Id = nextMatch.team1Id,
+                    team2Id = nextMatch.team2Id
+                )
+
                 supabase.postgrest["matches"]
-                    .update(mapOf(
-                        "team1_id" to nextMatch.team1Id,
-                        "team2_id" to nextMatch.team2Id
-                    )) { filter { eq("id", nextMatch.id) } }
+                    .update(advanceRequest) { filter { eq("id", nextMatch.id) } }
+
                 cache.saveMatch(nextMatch)
             }
     }
 
     // ── Realtime ──────────────────────────────────────────────────────────────
-
     private suspend fun subscribeToTournaments(userId: String) {
         val channel = supabase.realtime.channel("tournaments:$userId")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {

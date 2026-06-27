@@ -18,9 +18,6 @@ val appModule = module {
     // ── Supabase ──────────────────────────────────────────────────────────────
     single { createSetPlaySupabaseClient() }
 
-    // ── Local Cache (platform-specific via expect/actual) ─────────────────────
-    single<LocalCache> { provideLocalCache(get()) }
-
     // ── Repositories ──────────────────────────────────────────────────────────
     single<AuthRepository> { AuthRepositoryImpl(get()) }
     single<TournamentRepository> {

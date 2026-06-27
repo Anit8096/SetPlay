@@ -150,3 +150,44 @@ data class DeviceTokenDto(
         platform = platform, createdAt = createdAt
     )
 }
+
+// Network Requests (KMP Web Serialization)
+@Serializable
+data class InsertTeamRequestDto(
+    @SerialName("tournament_id") val tournamentId: String,
+    val name: String,
+    val seed: Int?
+)
+
+@Serializable
+data class UpdateMatchResultRequestDto(
+    val score1: Int,
+    val score2: Int,
+    @SerialName("winner_id") val winnerId: String?,
+    @SerialName("loser_id") val loserId: String?,
+    val status: MatchStatus
+)
+
+@Serializable
+data class AdvanceWinnerRequestDto(
+    @SerialName("team1_id") val team1Id: String?,
+    @SerialName("team2_id") val team2Id: String?
+)
+
+@Serializable
+data class InsertTournamentRequestDto(
+    val name: String,
+    val format: BracketFormat,
+    val status: TournamentStatus,
+    @SerialName("created_by") val createdBy: String,
+    @SerialName("max_teams") val maxTeams: Int,
+    @SerialName("is_public") val isPublic: Boolean
+)
+
+@Serializable
+data class UpdateTournamentRequestDto(
+    val name: String,
+    val status: TournamentStatus,
+    @SerialName("is_public") val isPublic: Boolean,
+    @SerialName("max_teams") val maxTeams: Int
+)
