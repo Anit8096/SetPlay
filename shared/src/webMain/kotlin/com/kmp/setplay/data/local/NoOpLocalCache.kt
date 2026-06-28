@@ -26,55 +26,56 @@ import kotlinx.coroutines.flow.update
 class NoOpLocalCache : LocalCache {
 
     // ── In-memory stores ──────────────────────────────────────────────────────
+    // Prefixed with underscore to avoid clashing with interface parameter names
 
-    private val tournaments   = MutableStateFlow<List<Tournament>>(emptyList())
-    private val teams         = MutableStateFlow<List<Team>>(emptyList())
-    private val matches       = MutableStateFlow<List<Match>>(emptyList())
-    private val standings     = MutableStateFlow<List<Standing>>(emptyList())
-    private val announcements = MutableStateFlow<List<Announcement>>(emptyList())
+    private val _tournaments   = MutableStateFlow<List<Tournament>>(emptyList())
+    private val _teams         = MutableStateFlow<List<Team>>(emptyList())
+    private val _matches       = MutableStateFlow<List<Match>>(emptyList())
+    private val _standings     = MutableStateFlow<List<Standing>>(emptyList())
+    private val _announcements = MutableStateFlow<List<Announcement>>(emptyList())
 
     // ── Tournaments ───────────────────────────────────────────────────────────
 
     override fun observeMyTournaments(userId: String): Flow<List<Tournament>> =
-        tournaments.asStateFlow().map { list -> list.filter { it.createdBy == userId } }
+        _tournaments.asStateFlow().map { list -> list.filter { it.createdBy == userId } }
 
     override fun observeTournament(tournamentId: String): Flow<Tournament?> =
-        tournaments.asStateFlow().map { list -> list.find { it.id == tournamentId } }
+        _tournaments.asStateFlow().map { list -> list.find { it.id == tournamentId } }
 
-    override suspend fun saveTournaments(list: List<Tournament>) {
-        tournaments.update { current ->
-            val ids = list.map { it.id }.toSet()
-            current.filter { it.id !in ids } + list
+    override suspend fun saveTournaments(tournaments: List<Tournament>) {
+        _tournaments.update { current ->
+            val ids = tournaments.map { it.id }.toSet()
+            current.filter { it.id !in ids } + tournaments
         }
     }
 
     override suspend fun saveTournament(tournament: Tournament) {
-        tournaments.update { current ->
+        _tournaments.update { current ->
             current.filter { it.id != tournament.id } + tournament
         }
     }
 
     override suspend fun deleteTournament(tournamentId: String) {
-        tournaments.update { current -> current.filter { it.id != tournamentId } }
+        _tournaments.update { current -> current.filter { it.id != tournamentId } }
     }
 
     override suspend fun getTournamentByInviteCode(code: String): Tournament? =
-        tournaments.value.find { it.inviteCode == code }
+        _tournaments.value.find { it.inviteCode == code }
 
     // ── Teams ─────────────────────────────────────────────────────────────────
 
     override fun observeTeams(tournamentId: String): Flow<List<Team>> =
-        teams.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
+        _teams.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
 
-    override suspend fun saveTeams(list: List<Team>) {
-        teams.update { current ->
-            val ids = list.map { it.id }.toSet()
-            current.filter { it.id !in ids } + list
+    override suspend fun saveTeams(teams: List<Team>) {
+        _teams.update { current ->
+            val ids = teams.map { it.id }.toSet()
+            current.filter { it.id !in ids } + teams
         }
     }
 
     override suspend fun saveTeam(team: Team) {
-        teams.update { current -> current.filter { it.id != team.id } + team }
+        _teams.update { current -> current.filter { it.id != team.id } + team }
     }
 
     // ── Rounds ────────────────────────────────────────────────────────────────
@@ -84,43 +85,43 @@ class NoOpLocalCache : LocalCache {
     // ── Matches ───────────────────────────────────────────────────────────────
 
     override fun observeMatches(tournamentId: String): Flow<List<Match>> =
-        matches.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
+        _matches.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
 
-    override suspend fun saveMatches(list: List<Match>) {
-        matches.update { current ->
-            val ids = list.map { it.id }.toSet()
-            current.filter { it.id !in ids } + list
+    override suspend fun saveMatches(matches: List<Match>) {
+        _matches.update { current ->
+            val ids = matches.map { it.id }.toSet()
+            current.filter { it.id !in ids } + matches
         }
     }
 
     override suspend fun saveMatch(match: Match) {
-        matches.update { current -> current.filter { it.id != match.id } + match }
+        _matches.update { current -> current.filter { it.id != match.id } + match }
     }
 
     override suspend fun getMatch(matchId: String): Match? =
-        matches.value.find { it.id == matchId }
+        _matches.value.find { it.id == matchId }
 
     // ── Standings ─────────────────────────────────────────────────────────────
 
     override fun observeStandings(tournamentId: String): Flow<List<Standing>> =
-        standings.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
+        _standings.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
 
-    override suspend fun saveStandings(list: List<Standing>) {
-        standings.update { current ->
-            val ids = list.map { it.id }.toSet()
-            current.filter { it.id !in ids } + list
+    override suspend fun saveStandings(standings: List<Standing>) {
+        _standings.update { current ->
+            val ids = standings.map { it.id }.toSet()
+            current.filter { it.id !in ids } + standings
         }
     }
 
     // ── Announcements ─────────────────────────────────────────────────────────
 
     override fun observeAnnouncements(tournamentId: String): Flow<List<Announcement>> =
-        announcements.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
+        _announcements.asStateFlow().map { list -> list.filter { it.tournamentId == tournamentId } }
 
-    override suspend fun saveAnnouncements(list: List<Announcement>) {
-        announcements.update { current ->
-            val ids = list.map { it.id }.toSet()
-            current.filter { it.id !in ids } + list
+    override suspend fun saveAnnouncements(announcements: List<Announcement>) {
+        _announcements.update { current ->
+            val ids = announcements.map { it.id }.toSet()
+            current.filter { it.id !in ids } + announcements
         }
     }
 }
