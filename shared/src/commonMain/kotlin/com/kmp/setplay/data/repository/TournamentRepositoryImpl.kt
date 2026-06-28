@@ -65,12 +65,12 @@ class TournamentRepositoryImpl(
             // 2. Save fresh data to Room
             cache.saveTournaments(remote)
         }
-        // 3. Now observe Room — it has up-to-date data (or stale data if network failed)
+        // 3. Open Realtime channel so future changes flow in automatically
+        scope.launch { subscribeToTournaments(userId) }
+
+        // 4. Now observe Room — it has up-to-date data (or stale data if network failed)
         // Either way the UI gets something and Realtime keeps it current from here
         cache.observeMyTournaments(userId).collect { emit(it) }
-
-        // 4. Open Realtime channel so future changes flow in automatically
-        scope.launch { subscribeToTournaments(userId) }
     }
 
     override fun observeTournament(tournamentId: String): Flow<Tournament?> = flow {
@@ -86,11 +86,11 @@ class TournamentRepositoryImpl(
             // 2. Save to Room
             cache.saveTournament(remote)
         }
-        // 3. Observe Room
-        cache.observeTournament(tournamentId).collect { emit(it) }
-
-        // 4. Open Realtime channel
+        // 3. Open Realtime channel
         scope.launch { subscribeToTournamentDetail(tournamentId) }
+
+        // 4. Observe Room
+        cache.observeTournament(tournamentId).collect { emit(it) }
     }
 
     override fun observeMatches(tournamentId: String): Flow<List<Match>> = flow {
@@ -102,6 +102,8 @@ class TournamentRepositoryImpl(
         }.getOrNull()
 
         if (remote != null) cache.saveMatches(remote)
+
+        scope.launch { subscribeToTournamentDetail(tournamentId) }
 
         cache.observeMatches(tournamentId).collect { emit(it) }
     }
@@ -347,7 +349,7 @@ class TournamentRepositoryImpl(
 
     // ── Realtime ──────────────────────────────────────────────────────────────
 
-    private suspend fun subscribeToTournaments(userId: String) {
+    private suspend fun  subscribeToTournaments(userId: String) {
         val key = "tournaments:$userId"
         if (!activeChannels.add(key)) return
 
