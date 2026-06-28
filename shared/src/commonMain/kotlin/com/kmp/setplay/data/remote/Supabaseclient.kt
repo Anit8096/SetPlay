@@ -9,10 +9,8 @@ import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.functions.Functions
 
-
 expect fun provideSupabaseUrl(): String
 expect fun provideSupabaseKey(): String
-
 
 fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
     supabaseUrl = provideSupabaseUrl(),
@@ -30,10 +28,3 @@ fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
     install(Storage)
     install(Functions)
 }
-
-/**
- * On web, Supabase OAuth redirects back with session tokens in the URL hash.
- * This function parses that hash and imports the session into the Supabase client.
- * On Android, OAuth is handled natively and this is a no-op.
- */
-expect suspend fun parseSessionFromUrl()

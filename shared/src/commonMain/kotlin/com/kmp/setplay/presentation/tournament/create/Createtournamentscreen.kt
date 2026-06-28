@@ -3,6 +3,7 @@ package com.kmp.setplay.presentation.tournament.create
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,8 +22,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +41,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.presentation.common.ContentContainer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,20 +88,17 @@ fun CreateTournamentScreen(
         },
         modifier = modifier
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .imePadding()
-        ) {
-            when (state.step) {
-                CreateStep.DETAILS -> DetailsStep(state, onAction)
-                CreateStep.TEAMS   -> TeamsStep(state, onAction)
-                CreateStep.REVIEW  -> ReviewStep(state, onAction)
-            }
+        ContentContainer(modifier = Modifier.padding(innerPadding).imePadding()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (state.step) {
+                    CreateStep.DETAILS -> DetailsStep(state, onAction)
+                    CreateStep.TEAMS   -> TeamsStep(state, onAction)
+                    CreateStep.REVIEW  -> ReviewStep(state, onAction)
+                }
 
-            if (state.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                if (state.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
             }
         }
     }
@@ -217,8 +214,7 @@ private fun TeamsStep(
             )
             Button(
                 onClick = { onAction(CreateTournamentAction.AddTeam) },
-                enabled = state.teamNameInput.isNotBlank() &&
-                        state.teams.size < state.maxTeams
+                enabled = state.teamNameInput.isNotBlank() && state.teams.size < state.maxTeams
             ) {
                 Text("Add")
             }
@@ -274,22 +270,18 @@ private fun ReviewStep(
     onAction: (CreateTournamentAction) -> Unit
 ) {
     LazyColumn(
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        item {
-            Text("Review", style = MaterialTheme.typography.headlineSmall)
-        }
+        item { Text("Review", style = MaterialTheme.typography.headlineSmall) }
         item {
             ReviewRow("Name", state.name)
             ReviewRow("Format", state.format.displayName())
             ReviewRow("Max teams", state.maxTeams.toString())
             ReviewRow("Visibility", if (state.isPublic) "Public" else "Private")
         }
-        item {
-            Text("Teams (${state.teams.size})", style = MaterialTheme.typography.titleSmall)
-        }
+        item { Text("Teams (${state.teams.size})", style = MaterialTheme.typography.titleSmall) }
         items(state.teams) { team ->
             Text("• ${team.name}", style = MaterialTheme.typography.bodyMedium)
         }
@@ -309,9 +301,7 @@ private fun ReviewStep(
 @Composable
 private fun ReviewRow(label: String, value: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -320,10 +310,10 @@ private fun ReviewRow(label: String, value: String) {
 }
 
 private fun BracketFormat.displayName() = when (this) {
-    BracketFormat.SINGLE_ELIMINATION  -> "Single Elimination"
-    BracketFormat.DOUBLE_ELIMINATION  -> "Double Elimination"
-    BracketFormat.ROUND_ROBIN         -> "Round Robin"
-    BracketFormat.SWISS               -> "Swiss"
-    BracketFormat.LEAGUE              -> "League"
+    BracketFormat.SINGLE_ELIMINATION   -> "Single Elimination"
+    BracketFormat.DOUBLE_ELIMINATION   -> "Double Elimination"
+    BracketFormat.ROUND_ROBIN          -> "Round Robin"
+    BracketFormat.SWISS                -> "Swiss"
+    BracketFormat.LEAGUE               -> "League"
     BracketFormat.THREE_GAME_GUARANTEE -> "3-Game Guarantee"
 }

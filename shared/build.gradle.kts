@@ -94,6 +94,9 @@ kotlin {
 
             // QR generation
             implementation(libs.qrose)
+
+            // Material Icons Extended
+            implementation(libs.compose.material.icons.extended)
         }
 
         commonTest.dependencies {

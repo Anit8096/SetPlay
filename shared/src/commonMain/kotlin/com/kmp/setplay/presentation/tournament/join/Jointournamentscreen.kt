@@ -27,8 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.presentation.common.ContentContainer
 
-// ── Screen ────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JoinTournamentScreen(
@@ -63,41 +63,45 @@ fun JoinTournamentScreen(
         },
         modifier = modifier
     ) { innerPadding ->
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize().padding(innerPadding)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(24.dp)
+        ContentContainer(modifier = Modifier.padding(innerPadding)) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
             ) {
-                Text(
-                    "Enter the invite code shared by the tournament organizer.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = state.codeInput,
-                    onValueChange = { onAction(JoinTournamentAction.CodeChanged(it)) },
-                    label = { Text("Invite code") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Button(
-                    onClick = { onAction(JoinTournamentAction.Search) },
-                    enabled = state.codeInput.isNotBlank() && !state.isLoading,
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
                 ) {
-                    if (state.isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        "Enter the invite code shared by the tournament organizer.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = state.codeInput,
+                        onValueChange = { onAction(JoinTournamentAction.CodeChanged(it)) },
+                        label = { Text("Invite code") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Button(
+                        onClick = { onAction(JoinTournamentAction.Search) },
+                        enabled = state.codeInput.isNotBlank() && !state.isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (state.isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                        }
+                        Text("Find Tournament")
                     }
-                    Text("Find Tournament")
                 }
             }
         }

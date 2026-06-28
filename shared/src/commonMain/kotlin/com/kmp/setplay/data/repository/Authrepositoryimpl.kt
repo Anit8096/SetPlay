@@ -46,5 +46,3 @@ class AuthRepositoryImpl(
         supabase.auth.signOut()
     }
 }
-
-expect fun getOAuthRedirectUrl(): String

@@ -3,15 +3,9 @@ package com.kmp.setplay.navigation
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +13,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -30,8 +23,9 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.kmp.setplay.presentation.auth.AuthAction
 import com.kmp.setplay.presentation.auth.AuthViewModel
-import com.kmp.setplay.presentation.auth.LinkAccountBanner
 import com.kmp.setplay.presentation.auth.SignInScreen
+import com.kmp.setplay.presentation.home.HomeScreen
+import com.kmp.setplay.presentation.home.HomeViewModel
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentScreen
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailScreen
@@ -66,7 +60,7 @@ fun NavGraph() {
         Route.SignIn
     )
 
-    // Auth gate — push Home once a session exists, pop back to SignIn on sign-out.
+    // Auth gate
     LaunchedEffect(authState.isAuthenticated) {
         if (authState.isAuthenticated && backStack.lastOrNull() is Route.SignIn) {
             backStack.removeLastOrNull()
@@ -100,6 +94,7 @@ fun NavGraph() {
                     .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
             },
             entryProvider = entryProvider {
+
                 entry<Route.SignIn> {
                     SignInScreen(
                         state = authState,
@@ -108,9 +103,14 @@ fun NavGraph() {
                 }
 
                 entry<Route.Home> {
+                    val vm: HomeViewModel = koinViewModel()
+                    val state by vm.uiState.collectAsStateWithLifecycle()
                     HomeScreen(
-                        isAnonymous = authState.isAnonymous,
+                        state = state,
+                        authState = authState,
+                        onAction = vm::onAction,
                         onCreateTournament = { backStack.add(Route.CreateTournament) },
+                        onTournamentClick = { backStack.add(Route.TournamentDetail(it.id)) },
                         onJoin = { backStack.add(Route.JoinTournament()) },
                         onLinkGoogle = { authViewModel.onAction(AuthAction.LinkGoogle) },
                         onSignOut = { authViewModel.onAction(AuthAction.SignOut) }
@@ -164,47 +164,10 @@ fun NavGraph() {
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        Text("Settings — Phase 2")
+                        Text("Settings — coming soon")
                     }
                 }
             }
         )
-    }
-}
-
-// Temporary Home Screen
-@Composable
-private fun HomeScreen(
-    isAnonymous: Boolean,
-    onCreateTournament: () -> Unit,
-    onJoin: () -> Unit,
-    onLinkGoogle: () -> Unit,
-    onSignOut: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (isAnonymous) {
-            LinkAccountBanner(onLinkGoogle = onLinkGoogle)
-        }
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.weight(1f).fillMaxSize()
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth().padding(24.dp)
-            ) {
-                Text("SetPlay", style = MaterialTheme.typography.displaySmall)
-                Button(onClick = onCreateTournament, modifier = Modifier.fillMaxWidth()) {
-                    Text("Create tournament")
-                }
-                OutlinedButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
-                    Text("Join tournament")
-                }
-                OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
-                    Text("Sign out")
-                }
-            }
-        }
     }
 }

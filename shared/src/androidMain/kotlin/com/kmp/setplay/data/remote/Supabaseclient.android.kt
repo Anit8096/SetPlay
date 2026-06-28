@@ -11,15 +11,10 @@ import kotlinx.coroutines.launch
 actual fun provideSupabaseUrl(): String = BuildKonfig.SUPABASE_URL
 actual fun provideSupabaseKey(): String = BuildKonfig.SUPABASE_ANON_KEY
 
-actual suspend fun parseSessionFromUrl() {
-    // No-op on Android — handled in handleOAuthRedirect() below
-}
-
 /**
  * Called from MainActivity.onNewIntent().
- * handleDeeplinks() expects an Android Intent, not a raw URL string.
- * We reconstruct a minimal Intent with the URI data so the library
- * can extract the OAuth tokens from it.
+ * handleDeeplinks() extracts OAuth tokens from the intent URI and
+ * imports them into the Supabase auth session.
  */
 fun handleOAuthRedirect(supabase: SupabaseClient, intent: Intent) {
     CoroutineScope(Dispatchers.IO).launch {
