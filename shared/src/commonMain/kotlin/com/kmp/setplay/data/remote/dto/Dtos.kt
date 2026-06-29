@@ -6,11 +6,13 @@ import com.kmp.setplay.domain.model.DevicePlatform
 import com.kmp.setplay.domain.model.DeviceToken
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.MatchStatus
+import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Player
 import com.kmp.setplay.domain.model.Round
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.model.TournamentOrganizer
 import com.kmp.setplay.domain.model.TournamentStatus
 import kotlin.time.Instant
 import kotlinx.serialization.SerialName
@@ -22,6 +24,8 @@ import kotlinx.serialization.Serializable
  * models before being passed up to the repository or UI.
  */
 
+// Used in: observeMyTournaments, observeTournament, createTournament,
+// getTournamentByInviteCode, Realtime insert/update handler
 @Serializable
 data class TournamentDto(
     val id: String,
@@ -42,6 +46,7 @@ data class TournamentDto(
     )
 }
 
+// Used in: observeTeams, addTeam, generateBracket
 @Serializable
 data class TeamDto(
     val id: String,
@@ -57,6 +62,7 @@ data class TeamDto(
     )
 }
 
+// Not yet used — add back when player roster feature is built
 @Serializable
 data class PlayerDto(
     val id: String,
@@ -66,6 +72,7 @@ data class PlayerDto(
     fun toDomain() = Player(id = id, teamId = teamId, name = name)
 }
 
+// Used in: generateBracket (insert only, never decoded back from Supabase)
 @Serializable
 data class RoundDto(
     val id: String,
@@ -79,6 +86,8 @@ data class RoundDto(
     )
 }
 
+// Used in: observeMatches, updateMatch, generateBracket,
+// Realtime insert/update handler
 @Serializable
 data class MatchDto(
     val id: String,
@@ -103,6 +112,7 @@ data class MatchDto(
     )
 }
 
+// Used in: observeStandings
 @Serializable
 data class StandingDto(
     val id: String,
@@ -123,6 +133,7 @@ data class StandingDto(
     )
 }
 
+// Used in: observeAnnouncements
 @Serializable
 data class AnnouncementDto(
     val id: String,
@@ -137,6 +148,7 @@ data class AnnouncementDto(
     )
 }
 
+// Not yet used — add back when push notification feature is built
 @Serializable
 data class DeviceTokenDto(
     val id: String,
@@ -151,7 +163,24 @@ data class DeviceTokenDto(
     )
 }
 
-// Network Requests (KMP Web Serialization)
+// Used in: TournamentRepository.getOrganizerRole
+@Serializable
+data class TournamentOrganizerDto(
+    val id: String,
+    @SerialName("tournament_id") val tournamentId: String,
+    @SerialName("user_id")       val userId: String,
+    val role: OrganizerRole,
+    @SerialName("created_at")    val createdAt: Instant
+) {
+    fun toDomain() = TournamentOrganizer(
+        id = id, tournamentId = tournamentId, userId = userId,
+        role = role, createdAt = createdAt
+    )
+}
+
+// ── Network Requests (KMP Web Serialization) ──────────────────────────────────
+
+// Used in: addTeam
 @Serializable
 data class InsertTeamRequestDto(
     @SerialName("tournament_id") val tournamentId: String,
@@ -159,6 +188,7 @@ data class InsertTeamRequestDto(
     val seed: Int?
 )
 
+// Used in: updateMatch — sets score, winner, loser, status on completion
 @Serializable
 data class UpdateMatchResultRequestDto(
     val score1: Int,
@@ -168,12 +198,14 @@ data class UpdateMatchResultRequestDto(
     val status: MatchStatus
 )
 
+// Used in: updateMatch — slots winner into team1 or team2 of the next match
 @Serializable
 data class AdvanceWinnerRequestDto(
     @SerialName("team1_id") val team1Id: String?,
     @SerialName("team2_id") val team2Id: String?
 )
 
+// Used in: createTournament
 @Serializable
 data class InsertTournamentRequestDto(
     val name: String,
@@ -184,6 +216,7 @@ data class InsertTournamentRequestDto(
     @SerialName("is_public") val isPublic: Boolean
 )
 
+// Used in: updateTournament
 @Serializable
 data class UpdateTournamentRequestDto(
     val name: String,

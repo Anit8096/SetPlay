@@ -10,6 +10,7 @@ import com.kmp.setplay.data.remote.dto.RoundDto
 import com.kmp.setplay.data.remote.dto.StandingDto
 import com.kmp.setplay.data.remote.dto.TeamDto
 import com.kmp.setplay.data.remote.dto.TournamentDto
+import com.kmp.setplay.data.remote.dto.TournamentOrganizerDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchResultRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateTournamentRequestDto
 import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
@@ -17,6 +18,7 @@ import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.MatchStatus
+import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
@@ -347,9 +349,26 @@ class TournamentRepositoryImpl(
             }
     }
 
+    // ── Organizers ────────────────────────────────────────────────────────────
+
+    override suspend fun getOrganizerRole(
+        tournamentId: String,
+        userId: String
+    ): Result<OrganizerRole?> = runCatching {
+        val results = supabase.postgrest["tournament_organizers"]
+            .select {
+                filter {
+                    eq("tournament_id", tournamentId)
+                    eq("user_id", userId)
+                }
+            }
+            .decodeList<TournamentOrganizerDto>()
+        results.firstOrNull()?.role
+    }
+
     // ── Realtime ──────────────────────────────────────────────────────────────
 
-    private suspend fun  subscribeToTournaments(userId: String) {
+    private suspend fun subscribeToTournaments(userId: String) {
         val key = "tournaments:$userId"
         if (!activeChannels.add(key)) return
 

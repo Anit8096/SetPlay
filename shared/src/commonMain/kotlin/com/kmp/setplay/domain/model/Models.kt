@@ -97,3 +97,12 @@ data class DeviceToken(
     val platform: DevicePlatform,
     @SerialName("created_at") val createdAt: Instant
 )
+
+@Serializable
+data class TournamentOrganizer(
+    val id: String,
+    @SerialName("tournament_id") val tournamentId: String,
+    @SerialName("user_id")       val userId: String,
+    val role: OrganizerRole,
+    @SerialName("created_at")    val createdAt: Instant
+)

@@ -34,3 +34,9 @@ enum class DevicePlatform {
     @SerialName("ANDROID") ANDROID,
     @SerialName("WEB") WEB
 }
+
+@Serializable
+enum class OrganizerRole {
+    @SerialName("owner") OWNER,
+    @SerialName("organizer") ORGANIZER
+}

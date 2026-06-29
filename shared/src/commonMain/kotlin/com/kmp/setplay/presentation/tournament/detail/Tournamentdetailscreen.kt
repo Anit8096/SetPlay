@@ -129,18 +129,20 @@ fun TournamentDetailScreen(
             }
         }
 
-        state.scoringMatch?.let { match ->
-            ScoreEntryDialog(
-                match = match,
-                team1Name = state.teams.find { it.id == match.team1Id }?.name ?: "Team 1",
-                team2Name = state.teams.find { it.id == match.team2Id }?.name ?: "Team 2",
-                score1 = state.score1Input,
-                score2 = state.score2Input,
-                onScore1Changed = { onAction(TournamentDetailAction.Score1Changed(it)) },
-                onScore2Changed = { onAction(TournamentDetailAction.Score2Changed(it)) },
-                onSubmit = { onAction(TournamentDetailAction.SubmitScore) },
-                onDismiss = { onAction(TournamentDetailAction.DismissScoreDialog) }
-            )
+        if (state.isOrganizer) {
+            state.scoringMatch?.let { match ->
+                ScoreEntryDialog(
+                    match = match,
+                    team1Name = state.teams.find { it.id == match.team1Id }?.name ?: "Team 1",
+                    team2Name = state.teams.find { it.id == match.team2Id }?.name ?: "Team 2",
+                    score1 = state.score1Input,
+                    score2 = state.score2Input,
+                    onScore1Changed = { onAction(TournamentDetailAction.Score1Changed(it)) },
+                    onScore2Changed = { onAction(TournamentDetailAction.Score2Changed(it)) },
+                    onSubmit = { onAction(TournamentDetailAction.SubmitScore) },
+                    onDismiss = { onAction(TournamentDetailAction.DismissScoreDialog) }
+                )
+            }
         }
     }
 }
@@ -184,7 +186,7 @@ private fun BracketTab(
             .horizontalScroll(hScroll)
             .verticalScroll(vScroll)
     ) {
-        // We lay out rounds as a Row; connectors are drawn over/between them via Canvas
+        // We lay enum class OrganizerRole {out rounds as a Row; connectors are drawn over/between them via Canvas
         Row(
             horizontalArrangement = Arrangement.spacedBy(ROUND_GAP),
             verticalAlignment    = Alignment.CenterVertically,
@@ -214,7 +216,8 @@ private fun BracketTab(
                         val team1 = state.teams.find { it.id == match.team1Id }
                         val team2 = state.teams.find { it.id == match.team2Id }
                         val clickable = match.status == MatchStatus.SCHEDULED &&
-                                        match.team1Id != null && match.team2Id != null
+                                match.team1Id != null && match.team2Id != null &&
+                                state.isOrganizer
 
                         BracketMatchCard(
                             match    = match,
@@ -258,8 +261,8 @@ private fun BracketConnector(
 
     // Total height = label + all cards + gaps between cards
     val totalH = labelOffsetPx +
-                 fromMatchCount * cardHeightPx +
-                 (fromMatchCount - 1) * matchVGapPx
+            fromMatchCount * cardHeightPx +
+            (fromMatchCount - 1) * matchVGapPx
 
     Canvas(
         modifier = Modifier
@@ -395,7 +398,7 @@ private fun BracketTeamRow(
             style = MaterialTheme.typography.bodySmall,
             fontWeight = if (isWinner) FontWeight.Bold else FontWeight.Normal,
             color  = if (isWinner) MaterialTheme.colorScheme.primary
-                     else MaterialTheme.colorScheme.onSurface,
+            else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -406,15 +409,15 @@ private fun BracketTeamRow(
             Surface(
                 shape = RoundedCornerShape(4.dp),
                 color = if (isWinner)
-                            MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant
+                    MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Text(
                     score.toString(),
                     style      = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isWinner) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }

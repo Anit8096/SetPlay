@@ -4,15 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.Match
+import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Round
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -27,6 +30,9 @@ data class TournamentDetailUiState(
     val selectedTab: DetailTab = DetailTab.BRACKET,
     val isLoading: Boolean = true,
     val error: String? = null,
+    // null = still loading, non-null = resolved
+    val organizerRole: OrganizerRole? = null,
+    val isOrganizer: Boolean = false,
     // Score entry dialog
     val scoringMatch: Match? = null,
     val score1Input: String = "",
@@ -49,6 +55,7 @@ sealed interface TournamentDetailAction {
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 class TournamentDetailViewModel(
     private val tournamentId: String,
+    private val authRepository: AuthRepository,
     private val tournamentRepository: TournamentRepository
 ) : ViewModel() {
 
@@ -57,6 +64,22 @@ class TournamentDetailViewModel(
 
     init {
         observeAll()
+        fetchOrganizerRole()
+    }
+
+    private fun fetchOrganizerRole() {
+        viewModelScope.launch {
+            val userId = authRepository.currentUserId.first() ?: return@launch
+            tournamentRepository.getOrganizerRole(tournamentId, userId)
+                .onSuccess { role ->
+                    _uiState.update {
+                        it.copy(
+                            organizerRole = role,
+                            isOrganizer = role != null
+                        )
+                    }
+                }
+        }
     }
 
     private fun observeAll() {

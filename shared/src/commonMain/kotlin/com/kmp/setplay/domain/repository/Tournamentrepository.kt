@@ -3,12 +3,17 @@ package com.kmp.setplay.domain.repository
 import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Match
+import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
 import kotlinx.coroutines.flow.Flow
 
 interface TournamentRepository {
+
+    // ── Organizers ────────────────────────────────────────────────────────────
+    /** Returns the role of [userId] in [tournamentId], or null if not an organizer. */
+    suspend fun getOrganizerRole(tournamentId: String, userId: String): Result<OrganizerRole?>
 
     // ── Tournaments ───────────────────────────────────────────────────────────
     /** Observe all tournaments created by the current user. Live updates via Realtime. */

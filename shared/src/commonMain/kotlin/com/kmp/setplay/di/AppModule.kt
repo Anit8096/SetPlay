@@ -32,6 +32,7 @@ val appModule = module {
     viewModel { params ->
         TournamentDetailViewModel(
             tournamentId = params.get(),
+            authRepository = get(),
             tournamentRepository = get()
         )
     }
