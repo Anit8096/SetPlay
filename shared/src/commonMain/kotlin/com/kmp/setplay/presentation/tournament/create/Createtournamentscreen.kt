@@ -1,6 +1,5 @@
 package com.kmp.setplay.presentation.tournament.create
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,31 +14,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -47,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
@@ -76,51 +73,42 @@ fun CreateTournamentScreen(
         state.createdTournament?.let { onCreated(it) }
     }
 
+    val topBarTitle = when (state.step) {
+        CreateStep.PARTICIPANTS -> state.format.displayName() + " — Participants"
+        CreateStep.DETAILS      -> "Final Details"
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Column {
-                TopAppBar(
-                    title = {
-                        Text(
-                            when (state.step) {
-                                CreateStep.DETAILS -> "New Tournament"
-                                CreateStep.TEAMS   -> "Add Teams"
-                                CreateStep.REVIEW  -> "Review"
-                            },
-                            fontWeight = FontWeight.SemiBold
+            TopAppBar(
+                title = {
+                    Text(topBarTitle, fontWeight = FontWeight.SemiBold)
+                },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        if (state.step == CreateStep.PARTICIPANTS) onBack()
+                        else onAction(CreateTournamentAction.PreviousStep)
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
                         )
-                    },
-                    navigationIcon = {
-                        TextButton(onClick = {
-                            if (state.step == CreateStep.DETAILS) onBack()
-                            else onAction(CreateTournamentAction.PreviousStep)
-                        }) {
-                            Text(if (state.step == CreateStep.DETAILS) "Cancel" else "Back")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
-                LinearProgressIndicator(
-                    progress = { (state.step.ordinal + 1) / 3f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
+            )
         },
         modifier = modifier
     ) { innerPadding ->
         ContentContainer(modifier = Modifier.padding(innerPadding).imePadding()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 when (state.step) {
-                    CreateStep.DETAILS -> DetailsStep(state, onAction)
-                    CreateStep.TEAMS   -> TeamsStep(state, onAction)
-                    CreateStep.REVIEW  -> ReviewStep(state, onAction)
+                    CreateStep.PARTICIPANTS -> ParticipantsStep(state, onAction)
+                    CreateStep.DETAILS      -> DetailsStep(state, onAction)
                 }
-
                 if (state.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
@@ -129,81 +117,51 @@ fun CreateTournamentScreen(
     }
 }
 
-// ── Step 1: Details ───────────────────────────────────────────────────────────
+// ── Step 1: Participants ──────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailsStep(
+private fun ParticipantsStep(
     state: CreateTournamentUiState,
     onAction: (CreateTournamentAction) -> Unit
 ) {
+    val inputLabel = when {
+        state.isPublic && state.participantMode == ParticipantMode.PLAYERS -> "Player ID"
+        state.isPublic && state.participantMode == ParticipantMode.TEAMS   -> "Team ID"
+        state.participantMode == ParticipantMode.PLAYERS                   -> "Player name"
+        else                                                                -> "Team name"
+    }
+
+    val listLabel = when {
+        state.isPublic && state.participantMode == ParticipantMode.PLAYERS -> "Player IDs"
+        state.isPublic && state.participantMode == ParticipantMode.TEAMS   -> "Team IDs"
+        state.participantMode == ParticipantMode.PLAYERS                   -> "Player names"
+        else                                                                -> "Team names"
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        // Public / Private toggle
         item {
-            SectionLabel("Tournament Name")
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = state.name,
-                onValueChange = { onAction(CreateTournamentAction.NameChanged(it)) },
-                placeholder = { Text("e.g. Spring Championship 2025") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        item {
-            SectionLabel("Format")
-            Spacer(Modifier.height(10.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                BracketFormat.entries.forEach { format ->
-                    FormatOption(
-                        format = format,
-                        selected = state.format == format,
-                        onClick = { onAction(CreateTournamentAction.FormatChanged(format)) }
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionLabel("Max Teams")
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(4, 8, 16, 32).forEach { n ->
-                    TeamSizeChip(
-                        count = n,
-                        selected = state.maxTeams == n,
-                        onClick = { onAction(CreateTournamentAction.MaxTeamsChanged(n)) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
+            SectionCard {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Public Tournament",
+                            if (state.isPublic) "Public Tournament" else "Private Tournament",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "Visible to everyone on the Browse page",
+                            if (state.isPublic)
+                                "Browsable — participants join via Player/Team ID"
+                            else
+                                "Private — synced to your account only",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -216,319 +174,374 @@ private fun DetailsStep(
             }
         }
 
+        // Players / Teams toggle
         item {
-            Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = { onAction(CreateTournamentAction.NextStep) },
-                enabled = state.name.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Next: Add Teams", style = MaterialTheme.typography.bodyLarge)
+            SectionLabel("Participants")
+            Spacer(Modifier.height(10.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                ParticipantMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = state.participantMode == mode,
+                        onClick = { onAction(CreateTournamentAction.ParticipantModeChanged(mode)) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = ParticipantMode.entries.size
+                        ),
+                        label = {
+                            Text(if (mode == ParticipantMode.PLAYERS) "Players" else "Teams")
+                        }
+                    )
+                }
             }
         }
-    }
-}
 
-@Composable
-private fun FormatOption(
-    format: BracketFormat,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor = if (selected) MaterialTheme.colorScheme.primary
-                      else MaterialTheme.colorScheme.outlineVariant
-    val bgColor = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                  else MaterialTheme.colorScheme.surface
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = bgColor,
-        border = BorderStroke(
-            width = if (selected) 2.dp else 1.dp,
-            color = borderColor
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            Text(
-                format.emoji(),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.width(32.dp)
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    format.displayName(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface
+        // Max size chips
+        item {
+            SectionLabel("Max size")
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(4, 8, 16, 32).forEach { n ->
+                    SizeChip(
+                        label = "$n",
+                        selected = state.maxSize == n,
+                        onClick = { onAction(CreateTournamentAction.MaxSizeChanged(n)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                SizeChip(
+                    label = "∞",
+                    selected = state.maxSize == null,
+                    onClick = { onAction(CreateTournamentAction.MaxSizeChanged(null)) },
+                    modifier = Modifier.weight(1f)
                 )
+            }
+        }
+
+        // Name / ID input + list
+        item {
+            val count = state.participants.size
+            val limitLabel = if (state.maxSize == null) "No limit" else "${state.maxSize}"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(listLabel)
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    format.description(),
-                    style = MaterialTheme.typography.bodySmall,
+                    "$count / $limitLabel",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (selected) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TeamSizeChip(
-    count: Int,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val bgColor = if (selected) MaterialTheme.colorScheme.primary
-                  else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (selected) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = bgColor,
-        modifier = modifier.height(48.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Text(
-                "$count",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = textColor
-            )
-        }
-    }
-}
-
-// ── Step 2: Teams ─────────────────────────────────────────────────────────────
-
-@Composable
-private fun TeamsStep(
-    state: CreateTournamentUiState,
-    onAction: (CreateTournamentAction) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 24.dp)
-    ) {
-        // Header with count
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                "Teams",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (state.teams.size >= state.maxTeams)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant
+            Spacer(Modifier.height(10.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "${state.teams.size} / ${state.maxTeams}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (state.teams.size >= state.maxTeams)
-                                MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                OutlinedTextField(
+                    value = state.participantInput,
+                    onValueChange = { onAction(CreateTournamentAction.ParticipantInputChanged(it)) },
+                    placeholder = { Text(inputLabel) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
                 )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Input row
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedTextField(
-                value = state.teamNameInput,
-                onValueChange = { onAction(CreateTournamentAction.TeamNameInputChanged(it)) },
-                placeholder = { Text("Team name") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = { onAction(CreateTournamentAction.AddTeam) },
-                enabled = state.teamNameInput.isNotBlank() && state.teams.size < state.maxTeams,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.height(56.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add team", modifier = Modifier.size(20.dp))
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Teams list
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(state.teams, key = { it.id }) { team ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
+                Button(
+                    onClick = { onAction(CreateTournamentAction.AddParticipant) },
+                    enabled = state.participantInput.isNotBlank() &&
+                            (state.maxSize == null || state.participants.size < state.maxSize),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(56.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+
+        // Participant list
+        if (state.participants.isNotEmpty()) {
+            itemsIndexed(state.participants, key = { _, p -> p.id }) { _, participant ->
+                ParticipantRow(
+                    participant = participant,
+                    onRemove = { onAction(CreateTournamentAction.RemoveParticipant(participant.id)) }
+                )
+            }
+        }
+
+        // Seeding
+        item {
+            SectionLabel("Seeding")
+            Spacer(Modifier.height(10.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SeedingMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = state.seeding == mode,
+                        onClick = { onAction(CreateTournamentAction.SeedingChanged(mode)) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = SeedingMode.entries.size
+                        ),
+                        label = {
                             Text(
-                                "#${team.seed}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                when (mode) {
+                                    SeedingMode.SEEDED     -> "Seeded"
+                                    SeedingMode.BLIND_DRAW -> "Blind Draw"
+                                    SeedingMode.MANUAL     -> "Manual"
+                                },
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
-                        Spacer(Modifier.width(12.dp))
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when (state.seeding) {
+                    SeedingMode.SEEDED     -> "#1 vs last seed, #2 vs second-last — top seeds don't meet early"
+                    SeedingMode.BLIND_DRAW -> "Participants are randomly assigned to bracket slots"
+                    SeedingMode.MANUAL     -> "You decide the matchups after creation"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // 3rd place game
+        item {
+            SectionCard {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            team.name,
+                            "3rd place game",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
+                            fontWeight = FontWeight.SemiBold
                         )
-                        TextButton(
-                            onClick = { onAction(CreateTournamentAction.RemoveTeam(team.id)) },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Text("Remove", style = MaterialTheme.typography.labelMedium)
-                        }
+                        Text(
+                            "Losers of semi-finals play for bronze",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (state.thirdPlaceGame) "Yes" else "No",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = state.thirdPlaceGame,
+                            onCheckedChange = {
+                                onAction(CreateTournamentAction.ThirdPlaceGameChanged(it))
+                            }
+                        )
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = { onAction(CreateTournamentAction.NextStep) },
-            enabled = state.teams.size >= 2,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Next: Review", style = MaterialTheme.typography.bodyLarge)
+        // Next button
+        item {
+            Button(
+                onClick = { onAction(CreateTournamentAction.NextStep) },
+                enabled = state.participants.size >= 2,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Next: Final Details", style = MaterialTheme.typography.bodyLarge)
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
-// ── Step 3: Review ────────────────────────────────────────────────────────────
+// ── Step 2: Details ───────────────────────────────────────────────────────────
 
 @Composable
-private fun ReviewStep(
+private fun DetailsStep(
     state: CreateTournamentUiState,
     onAction: (CreateTournamentAction) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        // Tournament name
         item {
-            Text(
-                "Ready to create?",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Review your tournament details before generating the bracket.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            SectionLabel("Tournament name")
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = { onAction(CreateTournamentAction.NameChanged(it)) },
+                placeholder = { Text("e.g. Spring Championship 2025") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
+        // Sport
         item {
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
+            SectionLabel("Sport")
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.sport,
+                onValueChange = { onAction(CreateTournamentAction.SportChanged(it)) },
+                placeholder = { Text("e.g. Football, Basketball…") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Start / End date
+        item {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ReviewRow("Tournament", state.name)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ReviewRow("Format", "${state.format.emoji()} ${state.format.displayName()}")
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ReviewRow("Max teams", "${state.maxTeams} teams")
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    ReviewRow("Visibility", if (state.isPublic) "🌐 Public" else "🔒 Private")
+                Column(modifier = Modifier.weight(1f)) {
+                    SectionLabel("Start date")
+                    Text(
+                        "Optional",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = state.startDate?.toString() ?: "",
+                        onValueChange = { /* date picker will replace this */ },
+                        placeholder = { Text("yyyy-mm-dd") },
+                        readOnly = true,
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    SectionLabel("End date")
+                    Text(
+                        "Optional",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = state.endDate?.toString() ?: "",
+                        onValueChange = { /* date picker will replace this */ },
+                        placeholder = { Text("yyyy-mm-dd") },
+                        readOnly = true,
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
 
+        // Description
         item {
+            SectionLabel("Description")
             Text(
-                "Teams (${state.teams.size})",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                "Optional",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.description,
+                onValueChange = { onAction(CreateTournamentAction.DescriptionChanged(it)) },
+                placeholder = { Text("Rules, location, notes…") },
+                minLines = 3,
+                maxLines = 5,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
-        items(state.teams) { team ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "#${team.seed}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(36.dp)
-                )
-                Text(team.name, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-
+        // Create button
         item {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Button(
                 onClick = { onAction(CreateTournamentAction.CreateAndGenerate) },
-                enabled = !state.isLoading,
+                enabled = state.name.isNotBlank() && !state.isLoading,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Create & Generate Bracket", style = MaterialTheme.typography.bodyLarge)
+                Text("Create Tournament", style = MaterialTheme.typography.bodyLarge)
             }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+// ── Shared sub-composables ────────────────────────────────────────────────────
+
+@Composable
+private fun ParticipantRow(
+    participant: ParticipantEntry,
+    onRemove: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        ) {
+            Text(
+                "#${participant.seed}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            participant.displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Remove",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    HorizontalDivider(
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        modifier = Modifier.padding(start = 40.dp)
+    )
+}
+
+@Composable
+private fun SizeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.height(48.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -544,22 +557,15 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun ReviewRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+private fun SectionCard(content: @Composable () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold
-        )
+        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            content()
+        }
     }
 }
 
@@ -572,22 +578,4 @@ private fun BracketFormat.displayName() = when (this) {
     BracketFormat.SWISS                -> "Swiss"
     BracketFormat.LEAGUE               -> "League"
     BracketFormat.THREE_GAME_GUARANTEE -> "3-Game Guarantee"
-}
-
-private fun BracketFormat.emoji() = when (this) {
-    BracketFormat.SINGLE_ELIMINATION   -> "⚡"
-    BracketFormat.DOUBLE_ELIMINATION   -> "🔄"
-    BracketFormat.ROUND_ROBIN          -> "🔁"
-    BracketFormat.SWISS                -> "🎯"
-    BracketFormat.LEAGUE               -> "🏅"
-    BracketFormat.THREE_GAME_GUARANTEE -> "🎮"
-}
-
-private fun BracketFormat.description() = when (this) {
-    BracketFormat.SINGLE_ELIMINATION   -> "One loss and you're out"
-    BracketFormat.DOUBLE_ELIMINATION   -> "Two losses before you're eliminated"
-    BracketFormat.ROUND_ROBIN          -> "Everyone plays everyone once"
-    BracketFormat.SWISS                -> "Matched by similar win-loss record"
-    BracketFormat.LEAGUE               -> "Full season with recurring matches"
-    BracketFormat.THREE_GAME_GUARANTEE -> "Every team plays at least 3 games"
 }

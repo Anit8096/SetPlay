@@ -11,41 +11,90 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+enum class CreateStep { PARTICIPANTS, DETAILS }
+
+enum class ParticipantMode { PLAYERS, TEAMS }
+
+enum class SeedingMode { SEEDED, BLIND_DRAW, MANUAL }
+
+// Null = No Limit
+typealias MaxSize = Int?
+
+// ── Participant entry ─────────────────────────────────────────────────────────
+
+data class ParticipantEntry(
+    val id: String,          // local only during creation
+    val displayName: String, // name (private) or ID (public)
+    val seed: Int
+)
 
 // ── State ─────────────────────────────────────────────────────────────────────
+
 data class CreateTournamentUiState(
-    val name: String = "",
     val format: BracketFormat = BracketFormat.SINGLE_ELIMINATION,
-    val maxTeams: Int = 8,
+
+    // ── Step 1: Participants ──
     val isPublic: Boolean = false,
-    // Team entry
-    val teams: List<Team> = emptyList(),
-    val teamNameInput: String = "",
-    // Steps: DETAILS -> TEAMS -> REVIEW
-    val step: CreateStep = CreateStep.DETAILS,
+    val participantMode: ParticipantMode = ParticipantMode.TEAMS,
+    val maxSize: MaxSize = null,           // null = No Limit
+    val participants: List<ParticipantEntry> = emptyList(),
+    val participantInput: String = "",
+    val seeding: SeedingMode = SeedingMode.SEEDED,
+    val thirdPlaceGame: Boolean = true,
+
+    // ── Step 2: Details ──
+    val name: String = "",
+    val sport: String = "",
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val description: String = "",
+
+    // ── Navigation ──
+    val step: CreateStep = CreateStep.PARTICIPANTS,
+
+    // ── Async ──
     val isLoading: Boolean = false,
     val error: String? = null,
     val createdTournament: Tournament? = null
 )
 
-enum class CreateStep { DETAILS, TEAMS, REVIEW }
-
 // ── Actions ───────────────────────────────────────────────────────────────────
+
 sealed interface CreateTournamentAction {
-    data class NameChanged(val name: String) : CreateTournamentAction
-    data class FormatChanged(val format: BracketFormat) : CreateTournamentAction
-    data class MaxTeamsChanged(val max: Int) : CreateTournamentAction
+    // Step 1
     data class IsPublicChanged(val isPublic: Boolean) : CreateTournamentAction
-    data class TeamNameInputChanged(val name: String) : CreateTournamentAction
-    data object AddTeam : CreateTournamentAction
-    data class RemoveTeam(val teamId: String) : CreateTournamentAction
+    data class ParticipantModeChanged(val mode: ParticipantMode) : CreateTournamentAction
+    data class MaxSizeChanged(val size: MaxSize) : CreateTournamentAction
+    data class ParticipantInputChanged(val value: String) : CreateTournamentAction
+    data object AddParticipant : CreateTournamentAction
+    data class RemoveParticipant(val id: String) : CreateTournamentAction
+    data class SeedingChanged(val mode: SeedingMode) : CreateTournamentAction
+    data class ThirdPlaceGameChanged(val enabled: Boolean) : CreateTournamentAction
+
+    // Step 2
+    data class NameChanged(val name: String) : CreateTournamentAction
+    data class SportChanged(val sport: String) : CreateTournamentAction
+    data class StartDateChanged(val date: LocalDate?) : CreateTournamentAction
+    data class EndDateChanged(val date: LocalDate?) : CreateTournamentAction
+    data class DescriptionChanged(val value: String) : CreateTournamentAction
+
+    // Navigation
     data object NextStep : CreateTournamentAction
     data object PreviousStep : CreateTournamentAction
+
+    // Submit
     data object CreateAndGenerate : CreateTournamentAction
+
+    // Misc
     data object DismissError : CreateTournamentAction
 }
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
+
 class CreateTournamentViewModel(
     private val tournamentRepository: TournamentRepository
 ) : ViewModel() {
@@ -53,36 +102,74 @@ class CreateTournamentViewModel(
     private val _uiState = MutableStateFlow(CreateTournamentUiState())
     val uiState: StateFlow<CreateTournamentUiState> = _uiState.asStateFlow()
 
+    fun initFormat(format: BracketFormat) {
+        // Only set if not already initialized (VM survives recomposition)
+        if (_uiState.value.format != format) {
+            _uiState.update { CreateTournamentUiState(format = format) }
+        }
+    }
+
     fun onAction(action: CreateTournamentAction) {
         when (action) {
+            // ── Step 1 ────────────────────────────────────────────────────────
+            is CreateTournamentAction.IsPublicChanged ->
+                _uiState.update { it.copy(isPublic = action.isPublic, participants = emptyList(), participantInput = "") }
+
+            is CreateTournamentAction.ParticipantModeChanged ->
+                _uiState.update { it.copy(participantMode = action.mode, participants = emptyList(), participantInput = "") }
+
+            is CreateTournamentAction.MaxSizeChanged ->
+                _uiState.update { it.copy(maxSize = action.size) }
+
+            is CreateTournamentAction.ParticipantInputChanged ->
+                _uiState.update { it.copy(participantInput = action.value) }
+
+            CreateTournamentAction.AddParticipant -> addParticipant()
+
+            is CreateTournamentAction.RemoveParticipant ->
+                _uiState.update { state ->
+                    val updated = state.participants
+                        .filter { it.id != action.id }
+                        .mapIndexed { i, p -> p.copy(seed = i + 1) }
+                    state.copy(participants = updated)
+                }
+
+            is CreateTournamentAction.SeedingChanged ->
+                _uiState.update { it.copy(seeding = action.mode) }
+
+            is CreateTournamentAction.ThirdPlaceGameChanged ->
+                _uiState.update { it.copy(thirdPlaceGame = action.enabled) }
+
+            // ── Step 2 ────────────────────────────────────────────────────────
             is CreateTournamentAction.NameChanged ->
                 _uiState.update { it.copy(name = action.name) }
 
-            is CreateTournamentAction.FormatChanged ->
-                _uiState.update { it.copy(format = action.format) }
+            is CreateTournamentAction.SportChanged ->
+                _uiState.update { it.copy(sport = action.sport) }
 
-            is CreateTournamentAction.MaxTeamsChanged ->
-                _uiState.update { it.copy(maxTeams = action.max) }
+            is CreateTournamentAction.StartDateChanged ->
+                _uiState.update { it.copy(startDate = action.date) }
 
-            is CreateTournamentAction.IsPublicChanged ->
-                _uiState.update { it.copy(isPublic = action.isPublic) }
+            is CreateTournamentAction.EndDateChanged ->
+                _uiState.update { it.copy(endDate = action.date) }
 
-            is CreateTournamentAction.TeamNameInputChanged ->
-                _uiState.update { it.copy(teamNameInput = action.name) }
+            is CreateTournamentAction.DescriptionChanged ->
+                _uiState.update { it.copy(description = action.value) }
 
-            CreateTournamentAction.AddTeam -> addTeam()
-
-            is CreateTournamentAction.RemoveTeam ->
-                _uiState.update { state ->
-                    state.copy(teams = state.teams.filter { it.id != action.teamId })
+            // ── Navigation ────────────────────────────────────────────────────
+            CreateTournamentAction.NextStep -> {
+                val state = _uiState.value
+                if (state.participants.size < 2) {
+                    _uiState.update { it.copy(error = "Add at least 2 participants") }
+                    return
                 }
-
-            CreateTournamentAction.NextStep ->
-                _uiState.update { it.copy(step = it.step.next()) }
+                _uiState.update { it.copy(step = CreateStep.DETAILS) }
+            }
 
             CreateTournamentAction.PreviousStep ->
-                _uiState.update { it.copy(step = it.step.previous()) }
+                _uiState.update { it.copy(step = CreateStep.PARTICIPANTS) }
 
+            // ── Submit ────────────────────────────────────────────────────────
             CreateTournamentAction.CreateAndGenerate -> createAndGenerate()
 
             CreateTournamentAction.DismissError ->
@@ -90,27 +177,20 @@ class CreateTournamentViewModel(
         }
     }
 
-    private fun addTeam() {
-        val name = _uiState.value.teamNameInput.trim()
-        if (name.isBlank()) return
-        if (_uiState.value.teams.size >= _uiState.value.maxTeams) {
-            _uiState.update { it.copy(error = "Maximum teams reached") }
+    private fun addParticipant() {
+        val state = _uiState.value
+        val input = state.participantInput.trim()
+        if (input.isBlank()) return
+        if (state.maxSize != null && state.participants.size >= state.maxSize) {
+            _uiState.update { it.copy(error = "Maximum participants reached") }
             return
         }
-
-        // Add local placeholder — real Team is created in Supabase after tournament creation
-        val placeholder = Team(
-            id = "local_${_uiState.value.teams.size}",
-            tournamentId = "",
-            name = name,
-            seed = _uiState.value.teams.size + 1,
-            logoUrl = null,
-            createdAt = kotlin.time.Clock.System.now()
+        val entry = ParticipantEntry(
+            id = "local_${state.participants.size}",
+            displayName = input,
+            seed = state.participants.size + 1
         )
-        _uiState.update { it.copy(
-            teams = it.teams + placeholder,
-            teamNameInput = ""
-        ) }
+        _uiState.update { it.copy(participants = it.participants + entry, participantInput = "") }
     }
 
     private fun createAndGenerate() {
@@ -119,42 +199,40 @@ class CreateTournamentViewModel(
             _uiState.update { it.copy(error = "Tournament name is required") }
             return
         }
-        if (state.teams.size < 2) {
-            _uiState.update { it.copy(error = "Add at least 2 teams") }
+        if (state.participants.size < 2) {
+            _uiState.update { it.copy(error = "Add at least 2 participants") }
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // 1. Create the tournament
+            // maxTeams: use actual count when No Limit, else the chosen cap
+            val maxTeams = state.maxSize ?: state.participants.size
+
             val tournamentResult = tournamentRepository.createTournament(
                 name = state.name,
                 format = state.format,
-                maxTeams = state.maxTeams,
+                maxTeams = maxTeams,
                 isPublic = state.isPublic
             )
-
             tournamentResult.onFailure { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
                 return@launch
             }
-
             val tournament = tournamentResult.getOrThrow()
 
-            // 2. Add all teams
-            state.teams.forEach { localTeam ->
+            state.participants.forEach { participant ->
                 tournamentRepository.addTeam(
                     tournamentId = tournament.id,
-                    name = localTeam.name,
-                    seed = localTeam.seed
+                    name = participant.displayName,
+                    seed = participant.seed
                 ).onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, error = e.message) }
                     return@launch
                 }
             }
 
-            // 3. Generate bracket
             tournamentRepository.generateBracket(tournament.id).onFailure { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
                 return@launch
@@ -162,17 +240,5 @@ class CreateTournamentViewModel(
 
             _uiState.update { it.copy(isLoading = false, createdTournament = tournament) }
         }
-    }
-
-    private fun CreateStep.next() = when (this) {
-        CreateStep.DETAILS -> CreateStep.TEAMS
-        CreateStep.TEAMS -> CreateStep.REVIEW
-        CreateStep.REVIEW -> CreateStep.REVIEW
-    }
-
-    private fun CreateStep.previous() = when (this) {
-        CreateStep.DETAILS -> CreateStep.DETAILS
-        CreateStep.TEAMS -> CreateStep.DETAILS
-        CreateStep.REVIEW -> CreateStep.TEAMS
     }
 }
