@@ -22,6 +22,9 @@ interface TournamentRepository {
     /** Observe a single tournament by ID. Live updates via Realtime. */
     fun observeTournament(tournamentId: String): Flow<Tournament?>
 
+    /** Fetches public tournaments open for registration or in progress, for the Discover sub-tab. */
+    suspend fun getPublicTournaments(): Result<List<Tournament>>
+
     /** Observe matches for a tournament. Live updates via Realtime. */
     fun observeMatches(tournamentId: String): Flow<List<Match>>
 
@@ -43,6 +46,7 @@ interface TournamentRepository {
     // ── Teams ─────────────────────────────────────────────────────────────────
     fun observeTeams(tournamentId: String): Flow<List<Team>>
     suspend fun addTeam(tournamentId: String, name: String, seed: Int?): Result<Team>
+    suspend fun renameTeam(teamId: String, name: String): Result<Unit>
     suspend fun deleteTeam(teamId: String): Result<Unit>
 
 

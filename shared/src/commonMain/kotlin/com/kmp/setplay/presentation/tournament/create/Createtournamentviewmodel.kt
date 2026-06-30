@@ -148,10 +148,25 @@ class CreateTournamentViewModel(
                 _uiState.update { it.copy(sport = action.sport) }
 
             is CreateTournamentAction.StartDateChanged ->
-                _uiState.update { it.copy(startDate = action.date) }
+                _uiState.update { state ->
+                    val newEnd = state.endDate?.takeIf { end -> action.date == null || end >= action.date }
+                    state.copy(
+                        startDate = action.date,
+                        endDate = newEnd,
+                        error = if (newEnd == null && state.endDate != null)
+                            "End date cleared — it was before the new start date"
+                        else state.error
+                    )
+                }
 
             is CreateTournamentAction.EndDateChanged ->
-                _uiState.update { it.copy(endDate = action.date) }
+                _uiState.update { state ->
+                    if (action.date != null && state.startDate != null && action.date < state.startDate) {
+                        state.copy(error = "End date can't be before the start date")
+                    } else {
+                        state.copy(endDate = action.date)
+                    }
+                }
 
             is CreateTournamentAction.DescriptionChanged ->
                 _uiState.update { it.copy(description = action.value) }
@@ -201,6 +216,12 @@ class CreateTournamentViewModel(
         }
         if (state.participants.size < 2) {
             _uiState.update { it.copy(error = "Add at least 2 participants") }
+            return
+        }
+        val start = state.startDate
+        val end = state.endDate
+        if (start != null && end != null && end < start) {
+            _uiState.update { it.copy(error = "End date can't be before the start date") }
             return
         }
 

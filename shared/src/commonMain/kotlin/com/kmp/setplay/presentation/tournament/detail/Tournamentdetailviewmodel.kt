@@ -5,10 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.OrganizerRole
-import com.kmp.setplay.domain.model.Round
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,12 +36,26 @@ data class TournamentDetailUiState(
     // Score entry dialog
     val scoringMatch: Match? = null,
     val score1Input: String = "",
-    val score2Input: String = ""
+    val score2Input: String = "",
+    // Rename tournament dialog
+    val showRenameDialog: Boolean = false,
+    val renameInput: String = "",
+    // Rename team dialog
+    val renamingTeam: Team? = null,
+    val renameTeamInput: String = "",
+    // Share code
+    val showShareCode: Boolean = false,
+    // Confirmation dialogs (owner only)
+    val confirmEndTournament: Boolean = false,
+    val confirmDeleteTournament: Boolean = false,
+    // Pop screen after delete
+    val tournamentDeleted: Boolean = false
 )
 
 enum class DetailTab { BRACKET, STANDINGS, ANNOUNCEMENTS }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
+
 sealed interface TournamentDetailAction {
     data class TabSelected(val tab: DetailTab) : TournamentDetailAction
     data class MatchClicked(val match: Match) : TournamentDetailAction
@@ -50,9 +64,34 @@ sealed interface TournamentDetailAction {
     data object SubmitScore : TournamentDetailAction
     data object DismissScoreDialog : TournamentDetailAction
     data object DismissError : TournamentDetailAction
+
+    // Rename tournament
+    data object ShowRenameDialog : TournamentDetailAction
+    data class RenameInputChanged(val value: String) : TournamentDetailAction
+    data object ConfirmRename : TournamentDetailAction
+    data object DismissRenameDialog : TournamentDetailAction
+
+    // Rename team
+    data class ShowRenameTeamDialog(val team: Team) : TournamentDetailAction
+    data class RenameTeamInputChanged(val value: String) : TournamentDetailAction
+    data object ConfirmRenameTeam : TournamentDetailAction
+    data object DismissRenameTeamDialog : TournamentDetailAction
+
+    // Share code
+    data object ShowShareCode : TournamentDetailAction
+    data object DismissShareCode : TournamentDetailAction
+
+    // End / Delete (owner only)
+    data object RequestEndTournament : TournamentDetailAction
+    data object ConfirmEndTournament : TournamentDetailAction
+    data object DismissEndDialog : TournamentDetailAction
+    data object RequestDeleteTournament : TournamentDetailAction
+    data object ConfirmDeleteTournament : TournamentDetailAction
+    data object DismissDeleteDialog : TournamentDetailAction
 }
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
+
 class TournamentDetailViewModel(
     private val tournamentId: String,
     private val authRepository: AuthRepository,
@@ -73,10 +112,7 @@ class TournamentDetailViewModel(
             tournamentRepository.getOrganizerRole(tournamentId, userId)
                 .onSuccess { role ->
                     _uiState.update {
-                        it.copy(
-                            organizerRole = role,
-                            isOrganizer = role != null
-                        )
+                        it.copy(organizerRole = role, isOrganizer = role != null)
                     }
                 }
         }
@@ -105,7 +141,18 @@ class TournamentDetailViewModel(
                         selectedTab = current.selectedTab,
                         scoringMatch = current.scoringMatch,
                         score1Input = current.score1Input,
-                        score2Input = current.score2Input
+                        score2Input = current.score2Input,
+                        organizerRole = current.organizerRole,
+                        isOrganizer = current.isOrganizer,
+                        showRenameDialog = current.showRenameDialog,
+                        renameInput = current.renameInput,
+                        renamingTeam = current.renamingTeam,
+                        renameTeamInput = current.renameTeamInput,
+                        showShareCode = current.showShareCode,
+                        confirmEndTournament = current.confirmEndTournament,
+                        confirmDeleteTournament = current.confirmDeleteTournament,
+                        tournament = if (current.tournamentDeleted) current.tournament else newState.tournament,
+                        tournamentDeleted = current.tournamentDeleted
                     )
                 }
             }
@@ -137,6 +184,103 @@ class TournamentDetailViewModel(
 
             TournamentDetailAction.DismissError ->
                 _uiState.update { it.copy(error = null) }
+
+            // ── Rename tournament ──────────────────────────────────────────────
+            TournamentDetailAction.ShowRenameDialog ->
+                _uiState.update { it.copy(showRenameDialog = true, renameInput = it.tournament?.name ?: "") }
+
+            is TournamentDetailAction.RenameInputChanged ->
+                _uiState.update { it.copy(renameInput = action.value) }
+
+            TournamentDetailAction.ConfirmRename -> renameTournament()
+
+            TournamentDetailAction.DismissRenameDialog ->
+                _uiState.update { it.copy(showRenameDialog = false, renameInput = "") }
+
+            // ── Rename team ────────────────────────────────────────────────────
+            is TournamentDetailAction.ShowRenameTeamDialog ->
+                _uiState.update { it.copy(renamingTeam = action.team, renameTeamInput = action.team.name) }
+
+            is TournamentDetailAction.RenameTeamInputChanged ->
+                _uiState.update { it.copy(renameTeamInput = action.value) }
+
+            TournamentDetailAction.ConfirmRenameTeam -> renameTeam()
+
+            TournamentDetailAction.DismissRenameTeamDialog ->
+                _uiState.update { it.copy(renamingTeam = null, renameTeamInput = "") }
+
+            // ── Share code ─────────────────────────────────────────────────────
+            TournamentDetailAction.ShowShareCode ->
+                _uiState.update { it.copy(showShareCode = true) }
+
+            TournamentDetailAction.DismissShareCode ->
+                _uiState.update { it.copy(showShareCode = false) }
+
+            // ── End ────────────────────────────────────────────────────────────
+            TournamentDetailAction.RequestEndTournament ->
+                _uiState.update { it.copy(confirmEndTournament = true) }
+
+            TournamentDetailAction.ConfirmEndTournament -> endTournament()
+
+            TournamentDetailAction.DismissEndDialog ->
+                _uiState.update { it.copy(confirmEndTournament = false) }
+
+            // ── Delete ─────────────────────────────────────────────────────────
+            TournamentDetailAction.RequestDeleteTournament ->
+                _uiState.update { it.copy(confirmDeleteTournament = true) }
+
+            TournamentDetailAction.ConfirmDeleteTournament -> deleteTournament()
+
+            TournamentDetailAction.DismissDeleteDialog ->
+                _uiState.update { it.copy(confirmDeleteTournament = false) }
+        }
+    }
+
+    private fun renameTournament() {
+        val tournament = _uiState.value.tournament ?: return
+        val newName = _uiState.value.renameInput.trim()
+        if (newName.isBlank()) {
+            _uiState.update { it.copy(error = "Name can't be empty") }
+            return
+        }
+        viewModelScope.launch {
+            tournamentRepository.updateTournament(tournament.copy(name = newName))
+                .onSuccess { _uiState.update { it.copy(showRenameDialog = false, renameInput = "") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't rename tournament") } }
+        }
+    }
+
+    private fun renameTeam() {
+        val team = _uiState.value.renamingTeam ?: return
+        val newName = _uiState.value.renameTeamInput.trim()
+        if (newName.isBlank()) {
+            _uiState.update { it.copy(error = "Team name can't be empty") }
+            return
+        }
+        viewModelScope.launch {
+            tournamentRepository.renameTeam(team.id, newName)
+                .onSuccess { _uiState.update { it.copy(renamingTeam = null, renameTeamInput = "") } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't rename team") } }
+        }
+    }
+
+    private fun endTournament() {
+        val tournament = _uiState.value.tournament ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, confirmEndTournament = false) }
+            tournamentRepository.updateTournament(tournament.copy(status = TournamentStatus.COMPLETED))
+                .onSuccess { _uiState.update { it.copy(isLoading = false) } }
+                .onFailure { e -> _uiState.update { it.copy(isLoading = false, error = e.message ?: "Couldn't end tournament") } }
+        }
+    }
+
+    private fun deleteTournament() {
+        val tournament = _uiState.value.tournament ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, confirmDeleteTournament = false) }
+            tournamentRepository.deleteTournament(tournament.id)
+                .onSuccess { _uiState.update { it.copy(isLoading = false, tournamentDeleted = true) } }
+                .onFailure { e -> _uiState.update { it.copy(isLoading = false, error = e.message ?: "Couldn't delete tournament") } }
         }
     }
 

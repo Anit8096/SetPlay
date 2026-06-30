@@ -4,6 +4,7 @@ import com.kmp.setplay.data.local.LocalCache
 import com.kmp.setplay.data.remote.dto.AdvanceWinnerRequestDto
 import com.kmp.setplay.data.remote.dto.AnnouncementDto
 import com.kmp.setplay.data.remote.dto.InsertTeamRequestDto
+import com.kmp.setplay.data.remote.dto.UpdateTeamRequestDto
 import com.kmp.setplay.data.remote.dto.InsertTournamentRequestDto
 import com.kmp.setplay.data.remote.dto.MatchDto
 import com.kmp.setplay.data.remote.dto.RoundDto
@@ -93,6 +94,14 @@ class TournamentRepositoryImpl(
 
         // 4. Observe Room
         cache.observeTournament(tournamentId).collect { emit(it) }
+    }
+
+    override suspend fun getPublicTournaments(): Result<List<Tournament>> = runCatching {
+        supabase.postgrest["tournaments"]
+            .select { filter { eq("is_public", true) } }
+            .decodeList<TournamentDto>()
+            .map { it.toDomain() }
+            .filter { it.status == TournamentStatus.REGISTRATION || it.status == TournamentStatus.IN_PROGRESS }
     }
 
     override fun observeMatches(tournamentId: String): Flow<List<Match>> = flow {
@@ -222,6 +231,11 @@ class TournamentRepositoryImpl(
     override suspend fun deleteTeam(teamId: String): Result<Unit> = runCatching {
         supabase.postgrest["teams"]
             .delete { filter { eq("id", teamId) } }
+    }
+
+    override suspend fun renameTeam(teamId: String, name: String): Result<Unit> = runCatching {
+        supabase.postgrest["teams"]
+            .update(UpdateTeamRequestDto(name = name)) { filter { eq("id", teamId) } }
     }
 
     // ── Join ──────────────────────────────────────────────────────────────────

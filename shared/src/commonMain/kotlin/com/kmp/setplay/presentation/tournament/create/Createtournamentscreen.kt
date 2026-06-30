@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.presentation.common.ContentContainer
+import com.kmp.setplay.presentation.common.DatePickerField
+import com.kmp.setplay.presentation.common.todayLocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -409,13 +411,11 @@ private fun DetailsStep(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.startDate?.toString() ?: "",
-                        onValueChange = { /* date picker will replace this */ },
-                        placeholder = { Text("yyyy-mm-dd") },
-                        readOnly = true,
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                    DatePickerField(
+                        label = "start date",
+                        date = state.startDate,
+                        onDateChanged = { onAction(CreateTournamentAction.StartDateChanged(it)) },
+                        minDate = todayLocalDate(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -427,13 +427,11 @@ private fun DetailsStep(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = state.endDate?.toString() ?: "",
-                        onValueChange = { /* date picker will replace this */ },
-                        placeholder = { Text("yyyy-mm-dd") },
-                        readOnly = true,
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                    DatePickerField(
+                        label = "end date",
+                        date = state.endDate,
+                        onDateChanged = { onAction(CreateTournamentAction.EndDateChanged(it)) },
+                        minDate = state.startDate ?: todayLocalDate(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

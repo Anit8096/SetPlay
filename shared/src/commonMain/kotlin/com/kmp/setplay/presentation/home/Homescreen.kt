@@ -50,7 +50,7 @@ fun HomeScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                androidx.compose.foundation.layout.Spacer(
+                Spacer(
                     modifier = Modifier.size(4.dp)
                 )
             }

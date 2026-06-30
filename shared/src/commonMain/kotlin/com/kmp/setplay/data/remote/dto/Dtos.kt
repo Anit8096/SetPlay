@@ -188,6 +188,12 @@ data class InsertTeamRequestDto(
     val seed: Int?
 )
 
+// Used in: renameTeam — updates just the team name
+@Serializable
+data class UpdateTeamRequestDto(
+    val name: String
+)
+
 // Used in: updateMatch — sets score, winner, loser, status on completion
 @Serializable
 data class UpdateMatchResultRequestDto(
