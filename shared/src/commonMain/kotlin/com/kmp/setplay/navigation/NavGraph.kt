@@ -97,6 +97,12 @@ fun NavGraph() {
                 AppShell(
                     onFormatSelected = { format ->
                         backStack.add(Route.CreateTournament(format))
+                    },
+                    onTournamentSelected = { tournamentId ->
+                        backStack.add(Route.TournamentDetail(tournamentId))
+                    },
+                    onJoinTournament = {
+                        backStack.add(Route.JoinTournament())
                     }
                 )
             }

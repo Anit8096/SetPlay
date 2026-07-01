@@ -39,7 +39,7 @@ data class CreateTournamentUiState(
 
     // ── Step 1: Participants ──
     val isPublic: Boolean = false,
-    val participantMode: ParticipantMode = ParticipantMode.TEAMS,
+    val participantMode: ParticipantMode = ParticipantMode.PLAYERS,
     val maxSize: MaxSize = null,           // null = No Limit
     val participants: List<ParticipantEntry> = emptyList(),
     val participantInput: String = "",
@@ -174,7 +174,7 @@ class CreateTournamentViewModel(
             // ── Navigation ────────────────────────────────────────────────────
             CreateTournamentAction.NextStep -> {
                 val state = _uiState.value
-                if (state.participants.size < 2) {
+                if (!state.isPublic && state.participants.size < 2) {
                     _uiState.update { it.copy(error = "Add at least 2 participants") }
                     return
                 }
@@ -214,7 +214,7 @@ class CreateTournamentViewModel(
             _uiState.update { it.copy(error = "Tournament name is required") }
             return
         }
-        if (state.participants.size < 2) {
+        if (!state.isPublic && state.participants.size < 2) {
             _uiState.update { it.copy(error = "Add at least 2 participants") }
             return
         }

@@ -8,9 +8,11 @@ import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.model.TournamentOrganizer
 import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +29,7 @@ data class TournamentDetailUiState(
     val matches: List<Match> = emptyList(),
     val standings: List<Standing> = emptyList(),
     val announcements: List<Announcement> = emptyList(),
+    val organizers: List<TournamentOrganizer> = emptyList(),
     val selectedTab: DetailTab = DetailTab.BRACKET,
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -43,6 +46,8 @@ data class TournamentDetailUiState(
     // Rename team dialog
     val renamingTeam: Team? = null,
     val renameTeamInput: String = "",
+    // Match schedule dialog
+    val schedulingMatch: Match? = null,
     // Share code
     val showShareCode: Boolean = false,
     // Confirmation dialogs (owner only)
@@ -50,9 +55,14 @@ data class TournamentDetailUiState(
     val confirmDeleteTournament: Boolean = false,
     // Pop screen after delete
     val tournamentDeleted: Boolean = false
-)
+) {
+    /** Bracket + Standings always. Announcements + Participants only for public tournaments. */
+    val availableTabs: List<DetailTab>
+        get() = if (tournament?.isPublic == true) DetailTab.entries.toList()
+                else listOf(DetailTab.BRACKET, DetailTab.STANDINGS)
+}
 
-enum class DetailTab { BRACKET, STANDINGS, ANNOUNCEMENTS }
+enum class DetailTab { BRACKET, STANDINGS, ANNOUNCEMENTS, PARTICIPANTS }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +86,12 @@ sealed interface TournamentDetailAction {
     data class RenameTeamInputChanged(val value: String) : TournamentDetailAction
     data object ConfirmRenameTeam : TournamentDetailAction
     data object DismissRenameTeamDialog : TournamentDetailAction
+
+    // Match schedule
+    data class ShowScheduleDialog(val match: Match) : TournamentDetailAction
+    data class ConfirmSchedule(val scheduledAt: Instant) : TournamentDetailAction
+    data object ClearSchedule : TournamentDetailAction
+    data object DismissScheduleDialog : TournamentDetailAction
 
     // Share code
     data object ShowShareCode : TournamentDetailAction
@@ -104,6 +120,7 @@ class TournamentDetailViewModel(
     init {
         observeAll()
         fetchOrganizerRole()
+        fetchOrganizers()
     }
 
     private fun fetchOrganizerRole() {
@@ -115,6 +132,13 @@ class TournamentDetailViewModel(
                         it.copy(organizerRole = role, isOrganizer = role != null)
                     }
                 }
+        }
+    }
+
+    private fun fetchOrganizers() {
+        viewModelScope.launch {
+            tournamentRepository.getOrganizers(tournamentId)
+                .onSuccess { list -> _uiState.update { it.copy(organizers = list) } }
         }
     }
 
@@ -144,10 +168,12 @@ class TournamentDetailViewModel(
                         score2Input = current.score2Input,
                         organizerRole = current.organizerRole,
                         isOrganizer = current.isOrganizer,
+                        organizers = current.organizers,
                         showRenameDialog = current.showRenameDialog,
                         renameInput = current.renameInput,
                         renamingTeam = current.renamingTeam,
                         renameTeamInput = current.renameTeamInput,
+                        schedulingMatch = current.schedulingMatch,
                         showShareCode = current.showShareCode,
                         confirmEndTournament = current.confirmEndTournament,
                         confirmDeleteTournament = current.confirmDeleteTournament,
@@ -209,6 +235,17 @@ class TournamentDetailViewModel(
             TournamentDetailAction.DismissRenameTeamDialog ->
                 _uiState.update { it.copy(renamingTeam = null, renameTeamInput = "") }
 
+            // ── Match schedule ─────────────────────────────────────────────────
+            is TournamentDetailAction.ShowScheduleDialog ->
+                _uiState.update { it.copy(schedulingMatch = action.match) }
+
+            is TournamentDetailAction.ConfirmSchedule -> setMatchSchedule(action.scheduledAt)
+
+            TournamentDetailAction.ClearSchedule -> setMatchSchedule(null)
+
+            TournamentDetailAction.DismissScheduleDialog ->
+                _uiState.update { it.copy(schedulingMatch = null) }
+
             // ── Share code ─────────────────────────────────────────────────────
             TournamentDetailAction.ShowShareCode ->
                 _uiState.update { it.copy(showShareCode = true) }
@@ -261,6 +298,15 @@ class TournamentDetailViewModel(
             tournamentRepository.renameTeam(team.id, newName)
                 .onSuccess { _uiState.update { it.copy(renamingTeam = null, renameTeamInput = "") } }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't rename team") } }
+        }
+    }
+
+    private fun setMatchSchedule(scheduledAt: Instant?) {
+        val match = _uiState.value.schedulingMatch ?: return
+        viewModelScope.launch {
+            tournamentRepository.setMatchSchedule(match.id, scheduledAt)
+                .onSuccess { _uiState.update { it.copy(schedulingMatch = null) } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't update schedule") } }
         }
     }
 

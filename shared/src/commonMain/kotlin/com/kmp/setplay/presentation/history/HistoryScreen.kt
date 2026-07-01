@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 @Composable
 fun HistoryScreen(
     contentPadding: PaddingValues = PaddingValues(),
+    onTournamentSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(

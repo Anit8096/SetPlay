@@ -20,6 +20,7 @@ data class Tournament(
     @SerialName("invite_code") val inviteCode: String?,
     @SerialName("max_teams")   val maxTeams: Int,
     @SerialName("is_public")   val isPublic: Boolean,
+    @SerialName("registration_deadline") val registrationDeadline: Instant? = null,
     @SerialName("created_at")  val createdAt: Instant,
     @SerialName("updated_at")  val updatedAt: Instant
 )
@@ -31,6 +32,7 @@ data class Team(
     val name: String,
     val seed: Int?,
     @SerialName("logo_url")  val logoUrl: String?,
+    @SerialName("user_id")   val userId: String? = null,
     @SerialName("created_at") val createdAt: Instant
 )
 
@@ -63,7 +65,8 @@ data class Match(
     @SerialName("loser_id")           val loserId: String?,
     val status: MatchStatus,
     @SerialName("next_match_id")      val nextMatchId: String?,
-    @SerialName("next_loser_match_id") val nextLoserMatchId: String?
+    @SerialName("next_loser_match_id") val nextLoserMatchId: String?,
+    @SerialName("scheduled_at")       val scheduledAt: Instant? = null
 )
 
 @Serializable

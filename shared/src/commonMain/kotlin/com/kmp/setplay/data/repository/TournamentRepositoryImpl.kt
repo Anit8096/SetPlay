@@ -13,6 +13,7 @@ import com.kmp.setplay.data.remote.dto.TeamDto
 import com.kmp.setplay.data.remote.dto.TournamentDto
 import com.kmp.setplay.data.remote.dto.TournamentOrganizerDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchResultRequestDto
+import com.kmp.setplay.data.remote.dto.UpdateMatchScheduleRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateTournamentRequestDto
 import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
 import com.kmp.setplay.domain.model.Announcement
@@ -23,7 +24,9 @@ import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.model.TournamentOrganizer
 import com.kmp.setplay.domain.model.TournamentStatus
+import com.kmp.setplay.domain.repository.ParticipationSummary
 import com.kmp.setplay.domain.repository.TournamentRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -41,6 +44,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -194,7 +198,8 @@ class TournamentRepositoryImpl(
                     name = tournament.name,
                     status = tournament.status,
                     isPublic = tournament.isPublic,
-                    maxTeams = tournament.maxTeams
+                    maxTeams = tournament.maxTeams,
+                    registrationDeadline = tournament.registrationDeadline
                 )
             ) { filter { eq("id", tournament.id) } }
         cache.saveTournament(tournament)
@@ -238,6 +243,42 @@ class TournamentRepositoryImpl(
             .update(UpdateTeamRequestDto(name = name)) { filter { eq("id", teamId) } }
     }
 
+    override suspend fun registerForTournament(
+        tournamentId: String,
+        userId: String,
+        displayName: String
+    ): Result<Team> = runCatching {
+        val dto = supabase.postgrest["teams"]
+            .insert(
+                InsertTeamRequestDto(
+                    tournamentId = tournamentId,
+                    name = displayName,
+                    seed = null,
+                    userId = userId
+                )
+            ) { select() }
+            .decodeSingle<TeamDto>()
+
+        val domain = dto.toDomain()
+        cache.saveTeam(domain)
+        domain
+    }
+
+    override suspend fun getParticipationSummary(
+        tournamentId: String,
+        userId: String?
+    ): Result<ParticipationSummary> = runCatching {
+        val teams = supabase.postgrest["teams"]
+            .select { filter { eq("tournament_id", tournamentId) } }
+            .decodeList<TeamDto>()
+            .map { it.toDomain() }
+
+        ParticipationSummary(
+            participantCount = teams.size,
+            hasJoined = userId != null && teams.any { it.userId == userId }
+        )
+    }
+
     // ── Join ──────────────────────────────────────────────────────────────────
 
     override suspend fun getTournamentByInviteCode(code: String): Result<Tournament> =
@@ -254,7 +295,11 @@ class TournamentRepositoryImpl(
 
     // ── Bracket ───────────────────────────────────────────────────────────────
 
-    override suspend fun generateBracket(tournamentId: String): Result<Unit> = runCatching {
+    override suspend fun generateBracket(
+        tournamentId: String,
+        seeding: SingleEliminationGenerator.Seeding,
+        includeThirdPlace: Boolean
+    ): Result<Unit> = runCatching {
         val teams = supabase.postgrest["teams"]
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<TeamDto>()
@@ -265,7 +310,9 @@ class TournamentRepositoryImpl(
         val result = SingleEliminationGenerator.generate(
             tournamentId = tournamentId,
             teams = teams,
-            idGenerator = { Uuid.random().toString() }
+            idGenerator = { Uuid.random().toString() },
+            seeding = seeding,
+            includeThirdPlace = includeThirdPlace
         )
 
         supabase.postgrest["rounds"].insert(
@@ -351,16 +398,28 @@ class TournamentRepositoryImpl(
             .map { it.toDomain() }
 
         SingleEliminationGenerator.advanceWinner(updatedMatch, allMatches)
-            .forEach { nextMatch ->
+            .forEach { updatedNextOrLoserMatch ->
                 supabase.postgrest["matches"]
                     .update(
                         AdvanceWinnerRequestDto(
-                            team1Id = nextMatch.team1Id,
-                            team2Id = nextMatch.team2Id
+                            team1Id = updatedNextOrLoserMatch.team1Id,
+                            team2Id = updatedNextOrLoserMatch.team2Id
                         )
-                    ) { filter { eq("id", nextMatch.id) } }
-                cache.saveMatch(nextMatch)
+                    ) { filter { eq("id", updatedNextOrLoserMatch.id) } }
+                cache.saveMatch(updatedNextOrLoserMatch)
             }
+    }
+
+    override suspend fun setMatchSchedule(matchId: String, scheduledAt: Instant?): Result<Unit> = runCatching {
+        supabase.postgrest["matches"]
+            .update(UpdateMatchScheduleRequestDto(scheduledAt = scheduledAt)) {
+                filter { eq("id", matchId) }
+            }
+        val updated = supabase.postgrest["matches"]
+            .select { filter { eq("id", matchId) } }
+            .decodeSingle<MatchDto>()
+            .toDomain()
+        cache.saveMatch(updated)
     }
 
     // ── Organizers ────────────────────────────────────────────────────────────
@@ -378,6 +437,13 @@ class TournamentRepositoryImpl(
             }
             .decodeList<TournamentOrganizerDto>()
         results.firstOrNull()?.role
+    }
+
+    override suspend fun getOrganizers(tournamentId: String): Result<List<TournamentOrganizer>> = runCatching {
+        supabase.postgrest["tournament_organizers"]
+            .select { filter { eq("tournament_id", tournamentId) } }
+            .decodeList<TournamentOrganizerDto>()
+            .map { it.toDomain() }
     }
 
     // ── Realtime ──────────────────────────────────────────────────────────────

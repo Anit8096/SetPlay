@@ -127,18 +127,14 @@ private fun ParticipantsStep(
     state: CreateTournamentUiState,
     onAction: (CreateTournamentAction) -> Unit
 ) {
-    val inputLabel = when {
-        state.isPublic && state.participantMode == ParticipantMode.PLAYERS -> "Player ID"
-        state.isPublic && state.participantMode == ParticipantMode.TEAMS   -> "Team ID"
-        state.participantMode == ParticipantMode.PLAYERS                   -> "Player name"
-        else                                                                -> "Team name"
+    val inputLabel = when (state.participantMode) {
+        ParticipantMode.PLAYERS -> "Player name"
+        ParticipantMode.TEAMS   -> "Team name"
     }
 
-    val listLabel = when {
-        state.isPublic && state.participantMode == ParticipantMode.PLAYERS -> "Player IDs"
-        state.isPublic && state.participantMode == ParticipantMode.TEAMS   -> "Team IDs"
-        state.participantMode == ParticipantMode.PLAYERS                   -> "Player names"
-        else                                                                -> "Team names"
+    val listLabel = when (state.participantMode) {
+        ParticipantMode.PLAYERS -> "Player names"
+        ParticipantMode.TEAMS   -> "Team names"
     }
 
     LazyColumn(
@@ -146,36 +142,6 @@ private fun ParticipantsStep(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        // Public / Private toggle
-        item {
-            SectionCard {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (state.isPublic) "Public Tournament" else "Private Tournament",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            if (state.isPublic)
-                                "Browsable — participants join via Player/Team ID"
-                            else
-                                "Private — synced to your account only",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = state.isPublic,
-                        onCheckedChange = { onAction(CreateTournamentAction.IsPublicChanged(it)) }
-                    )
-                }
-            }
-        }
-
         // Players / Teams toggle
         item {
             SectionLabel("Participants")
@@ -219,51 +185,72 @@ private fun ParticipantsStep(
             }
         }
 
-        // Name / ID input + list
-        item {
-            val count = state.participants.size
-            val limitLabel = if (state.maxSize == null) "No limit" else "${state.maxSize}"
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel(listLabel)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "$count / $limitLabel",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = state.participantInput,
-                    onValueChange = { onAction(CreateTournamentAction.ParticipantInputChanged(it)) },
-                    placeholder = { Text(inputLabel) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f)
-                )
-                Button(
-                    onClick = { onAction(CreateTournamentAction.AddParticipant) },
-                    enabled = state.participantInput.isNotBlank() &&
-                            (state.maxSize == null || state.participants.size < state.maxSize),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.height(56.dp)
+        // Name input + list (private only — public participants join via code/QR)
+        if (!state.isPublic) {
+            item {
+                val count = state.participants.size
+                val limitLabel = if (state.maxSize == null) "No limit" else "${state.maxSize}"
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(listLabel)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "$count / $limitLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
+                    OutlinedTextField(
+                        value = state.participantInput,
+                        onValueChange = { onAction(CreateTournamentAction.ParticipantInputChanged(it)) },
+                        placeholder = { Text(inputLabel) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { onAction(CreateTournamentAction.AddParticipant) },
+                        enabled = state.participantInput.isNotBlank() &&
+                                (state.maxSize == null || state.participants.size < state.maxSize),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(56.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(20.dp))
+                    }
                 }
             }
-        }
 
-        // Participant list
-        if (state.participants.isNotEmpty()) {
-            itemsIndexed(state.participants, key = { _, p -> p.id }) { _, participant ->
-                ParticipantRow(
-                    participant = participant,
-                    onRemove = { onAction(CreateTournamentAction.RemoveParticipant(participant.id)) }
-                )
+            // Participant list
+            if (state.participants.isNotEmpty()) {
+                itemsIndexed(state.participants, key = { _, p -> p.id }) { _, participant ->
+                    ParticipantRow(
+                        participant = participant,
+                        onRemove = { onAction(CreateTournamentAction.RemoveParticipant(participant.id)) }
+                    )
+                }
+            }
+        } else {
+            // Public info message
+            item {
+                SectionCard {
+                    Column {
+                        Text(
+                            "Participants join via invite code or QR",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "After creating the tournament, share the invite code or QR code. Players or team captains join themselves.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
 
@@ -342,11 +329,42 @@ private fun ParticipantsStep(
             }
         }
 
+        // Make Public toggle (at the bottom)
+        item {
+            SectionCard {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Make Public",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            if (state.isPublic)
+                                "Discoverable in Browse — participants join via code or QR"
+                            else
+                                "Private — synced to your account only, not discoverable",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = state.isPublic,
+                        onCheckedChange = { onAction(CreateTournamentAction.IsPublicChanged(it)) }
+                    )
+                }
+            }
+        }
+
         // Next button
         item {
+            val canProceed = if (state.isPublic) true else state.participants.size >= 2
             Button(
                 onClick = { onAction(CreateTournamentAction.NextStep) },
-                enabled = state.participants.size >= 2,
+                enabled = canProceed,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {

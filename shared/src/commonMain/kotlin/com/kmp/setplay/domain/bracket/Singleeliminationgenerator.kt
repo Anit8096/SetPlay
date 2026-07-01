@@ -18,6 +18,9 @@ import com.kmp.setplay.domain.model.Team
  */
 object SingleEliminationGenerator {
 
+    /** Mirrors presentation.tournament.create.SeedingMode without a cross-module dependency. */
+    enum class Seeding { SEEDED, BLIND_DRAW, MANUAL }
+
     data class BracketResult(
         val rounds: List<Round>,
         val matches: List<Match>
@@ -26,12 +29,14 @@ object SingleEliminationGenerator {
     fun generate(
         tournamentId: String,
         teams: List<Team>,
-        idGenerator: () -> String
+        idGenerator: () -> String,
+        seeding: Seeding = Seeding.SEEDED,
+        includeThirdPlace: Boolean = false
     ): BracketResult {
         require(teams.size >= 2) { "Need at least 2 teams" }
 
         val bracketSize = nextPowerOfTwo(teams.size)
-        val sortedTeams = sortTeams(teams, bracketSize)
+        val sortedTeams = orderTeams(teams, bracketSize, seeding)
 
         val rounds = mutableListOf<Round>()
         val matches = mutableListOf<Match>()
@@ -76,9 +81,12 @@ object SingleEliminationGenerator {
 
         // ── Subsequent rounds ─────────────────────────────────────────────────
         var previousRoundMatches = round1Matches
+        var semiFinalMatches: List<Match> = emptyList()
+
         for (roundNum in 2..totalRounds) {
             val roundId = idGenerator()
             val roundMatchCount = previousRoundMatches.size / 2
+            val isSemiFinalRound = roundMatchCount == 1 && totalRounds >= 2 && roundNum == totalRounds
 
             rounds.add(Round(
                 id = roundId,
@@ -119,42 +127,101 @@ object SingleEliminationGenerator {
                 }
             }
 
+            if (previousRoundMatches.size == 2) {
+                // The round we just linked FROM was the semi-finals
+                semiFinalMatches = previousRoundMatches
+            }
+
             matches.addAll(roundMatches)
             previousRoundMatches = roundMatches
+        }
+
+        // ── 3rd place match ──────────────────────────────────────────────────
+        // Only meaningful when there were semi-finals (bracket size >= 4)
+        if (includeThirdPlace && semiFinalMatches.size == 2) {
+            val thirdPlaceRoundId = idGenerator()
+            rounds.add(Round(
+                id = thirdPlaceRoundId,
+                tournamentId = tournamentId,
+                roundNumber = totalRounds, // sits alongside the Final
+                name = "3rd Place"
+            ))
+            val thirdPlaceMatch = Match(
+                id = idGenerator(),
+                roundId = thirdPlaceRoundId,
+                tournamentId = tournamentId,
+                matchNumber = 1,
+                team1Id = null,
+                team2Id = null,
+                score1 = null,
+                score2 = null,
+                winnerId = null,
+                loserId = null,
+                status = MatchStatus.SCHEDULED,
+                nextMatchId = null,
+                nextLoserMatchId = null
+            )
+            matches.add(thirdPlaceMatch)
+
+            // Slot each semi-final's loser into the 3rd place match once they lose
+            semiFinalMatches.forEach { sf ->
+                val idx = matches.indexOfFirst { it.id == sf.id }
+                if (idx != -1) {
+                    matches[idx] = matches[idx].copy(nextLoserMatchId = thirdPlaceMatch.id)
+                }
+            }
         }
 
         return BracketResult(rounds = rounds, matches = matches)
     }
 
     /**
-     * Call this when a match result is submitted to advance the winner.
-     * Returns the updated match and the next match with the winner slotted in.
+     * Call this when a match result is submitted to advance the winner
+     * (and, for semi-finals, slot the loser into the 3rd place match).
      */
     fun advanceWinner(
         completedMatch: Match,
         allMatches: List<Match>
     ): List<Match> {
-        val winnerId = completedMatch.winnerId ?: return emptyList()
-        val nextMatch = allMatches.firstOrNull {
-            it.id == completedMatch.nextMatchId
-        } ?: return emptyList()
+        val updates = mutableListOf<Match>()
 
-        // Slot winner into team1 or team2 of the next match
-        val updated = if (nextMatch.team1Id == null) {
-            nextMatch.copy(team1Id = winnerId)
-        } else {
-            nextMatch.copy(team2Id = winnerId)
+        val winnerId = completedMatch.winnerId
+        if (winnerId != null) {
+            val nextMatch = allMatches.firstOrNull { it.id == completedMatch.nextMatchId }
+            if (nextMatch != null) {
+                updates += if (nextMatch.team1Id == null) {
+                    nextMatch.copy(team1Id = winnerId)
+                } else {
+                    nextMatch.copy(team2Id = winnerId)
+                }
+            }
         }
 
-        return listOf(updated)
+        val loserId = completedMatch.loserId
+        if (loserId != null) {
+            val loserMatch = allMatches.firstOrNull { it.id == completedMatch.nextLoserMatchId }
+            if (loserMatch != null) {
+                updates += if (loserMatch.team1Id == null) {
+                    loserMatch.copy(team1Id = loserId)
+                } else {
+                    loserMatch.copy(team2Id = loserId)
+                }
+            }
+        }
+
+        return updates
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun sortTeams(teams: List<Team>, bracketSize: Int): List<Team?> {
-        val seeded = teams.sortedWith(compareBy(nullsLast()) { it.seed })
+    private fun orderTeams(teams: List<Team>, bracketSize: Int, seeding: Seeding): List<Team?> {
+        val ordered = when (seeding) {
+            Seeding.SEEDED     -> teams.sortedWith(compareBy(nullsLast()) { it.seed })
+            Seeding.BLIND_DRAW -> teams.shuffled()
+            Seeding.MANUAL     -> teams // insertion / manually-set order is preserved as-is
+        }
         // Pad with nulls for BYEs
-        return seeded + List(bracketSize - seeded.size) { null }
+        return ordered + List(bracketSize - ordered.size) { null }
     }
 
     private fun nextPowerOfTwo(n: Int): Int {

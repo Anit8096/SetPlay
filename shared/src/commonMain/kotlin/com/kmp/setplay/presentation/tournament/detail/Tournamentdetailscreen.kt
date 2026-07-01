@@ -1,8 +1,10 @@
 package com.kmp.setplay.presentation.tournament.detail
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -71,15 +75,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.MatchStatus
+import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Team
+import com.kmp.setplay.presentation.common.formatMatchSchedule
 
 // ── Match card dimensions (used for connector math) ──────────────────────────
-private val MATCH_CARD_WIDTH  = 180.dp
-private val MATCH_CARD_HEIGHT = 72.dp   // two team rows
-private val ROUND_GAP         = 40.dp   // horizontal gap between rounds
-private val MATCH_V_GAP       = 20.dp   // vertical gap between match cards in same round
+private val MATCH_CARD_WIDTH   = 200.dp
+private val MATCH_CARD_HEIGHT  = 72.dp   // two team rows
+private val SCORE_COL_WIDTH    = 44.dp   // dark score chip column on the right
+private val VS_BADGE_SIZE      = 22.dp   // "vs" circle overlapping the divider
+private val BLOCK_LABEL_HEIGHT = 22.dp   // "QF · Game 1" label above the card
+private val BLOCK_CAPTION_HEIGHT = 18.dp // "Set date & time" caption below the card
+private val ROUND_GAP          = 40.dp   // horizontal gap between rounds
+private val MATCH_V_GAP        = 20.dp   // vertical gap between match blocks in same round
+
+// Solid near-black score chip so it reads consistently across light/dark themes
+private val SCORE_CHIP_DARK = Color(0xFF1E1E24)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,21 +162,37 @@ fun TournamentDetailScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            PrimaryTabRow(selectedTabIndex = state.selectedTab.ordinal) {
-                DetailTab.entries.forEach { tab ->
+            val tabs = state.availableTabs
+            val activeTab = if (state.selectedTab in tabs) state.selectedTab else tabs.first()
+
+            PrimaryTabRow(selectedTabIndex = tabs.indexOf(activeTab)) {
+                tabs.forEach { tab ->
                     Tab(
-                        selected = state.selectedTab == tab,
+                        selected = activeTab == tab,
                         onClick = { onAction(TournamentDetailAction.TabSelected(tab)) },
                         text = { Text(tab.label()) }
                     )
                 }
             }
 
-            when (state.selectedTab) {
-                DetailTab.BRACKET      -> BracketTab(state, onAction)
-                DetailTab.STANDINGS    -> StandingsTab(state, onAction)
+            when (activeTab) {
+                DetailTab.BRACKET       -> BracketTab(state, onAction)
+                DetailTab.STANDINGS     -> StandingsTab(state, onAction)
                 DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
+                DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
             }
+        }
+
+        // ── Match schedule dialog ───────────────────────────────────────────────
+        state.schedulingMatch?.let { match ->
+            com.kmp.setplay.presentation.common.MatchDateTimePickerDialog(
+                initial = match.scheduledAt,
+                onConfirm = { onAction(TournamentDetailAction.ConfirmSchedule(it)) },
+                onClear = if (match.scheduledAt != null) {
+                    { onAction(TournamentDetailAction.ClearSchedule) }
+                } else null,
+                onDismiss = { onAction(TournamentDetailAction.DismissScheduleDialog) }
+            )
         }
 
         if (state.isOrganizer) {
@@ -367,47 +397,58 @@ private fun BracketTab(
             .horizontalScroll(hScroll)
             .verticalScroll(vScroll)
     ) {
-        // We lay enum class OrganizerRole {out rounds as a Row; connectors are drawn over/between them via Canvas
+        // Rounds laid out as a Row; connectors are drawn between them via Canvas
         Row(
             horizontalArrangement = Arrangement.spacedBy(ROUND_GAP),
             verticalAlignment    = Alignment.CenterVertically,
             modifier = Modifier.padding(24.dp)
         ) {
             matchesByRound.forEachIndexed { roundIndex, (_, roundMatches) ->
-                val sortedMatches = roundMatches.sortedBy { it.matchNumber }
-                val isLastRound   = roundIndex == totalRounds - 1
+                val sortedMatches   = roundMatches.sortedBy { it.matchNumber }
+                val isLastRound     = roundIndex == totalRounds - 1
+                val roundShort      = roundShortLabel(sortedMatches.size)
+                val isFinalRound    = sortedMatches.size == 1
 
-                // Round column
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(MATCH_V_GAP),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Round label
-                    Text(
-                        roundLabel(roundIndex, totalRounds, sortedMatches.size),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .padding(bottom = 8.dp)
-                            .width(MATCH_CARD_WIDTH)
-                    )
-
-                    sortedMatches.forEach { match ->
+                // Round column — each match is its own label + card + caption block
+                Column(verticalArrangement = Arrangement.spacedBy(MATCH_V_GAP)) {
+                    sortedMatches.forEachIndexed { matchIndex, match ->
                         val team1 = state.teams.find { it.id == match.team1Id }
                         val team2 = state.teams.find { it.id == match.team2Id }
                         val clickable = match.status == MatchStatus.SCHEDULED &&
                                 match.team1Id != null && match.team2Id != null &&
                                 state.isOrganizer
 
-                        BracketMatchCard(
-                            match    = match,
-                            team1    = team1,
-                            team2    = team2,
-                            onClick  = if (clickable) {
-                                { onAction(TournamentDetailAction.MatchClicked(match)) }
-                            } else null
-                        )
+                        Column(horizontalAlignment = Alignment.Start) {
+                            MatchLabel(
+                                text = matchLabel(roundShort, isFinalRound, matchIndex),
+                                isFinal = isFinalRound
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            BracketMatchCard(
+                                match    = match,
+                                team1    = team1,
+                                team2    = team2,
+                                onClick  = if (clickable) {
+                                    { onAction(TournamentDetailAction.MatchClicked(match)) }
+                                } else null,
+                                onNameClick = if (state.isOrganizer) { team ->
+                                    onAction(TournamentDetailAction.ShowRenameTeamDialog(team))
+                                } else null
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            TextButton(
+                                onClick = { onAction(TournamentDetailAction.ShowScheduleDialog(match)) },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                modifier = Modifier.height(BLOCK_CAPTION_HEIGHT)
+                            ) {
+                                Text(
+                                    match.scheduledAt?.let {
+                                        formatMatchSchedule(it)
+                                    } ?: "Set date & time",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -425,6 +466,27 @@ private fun BracketTab(
     }
 }
 
+@Composable
+private fun MatchLabel(text: String, isFinal: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (isFinal) {
+            Icon(
+                Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
 /**
  * Draws the bracket connector lines between two rounds.
  * Each pair of matches feeds into one match in the next round.
@@ -435,29 +497,34 @@ private fun BracketConnector(
     toMatchCount: Int,
     color: Color
 ) {
-    val cardHeightPx   = with(androidx.compose.ui.platform.LocalDensity.current) { MATCH_CARD_HEIGHT.toPx() }
-    val matchVGapPx    = with(androidx.compose.ui.platform.LocalDensity.current) { MATCH_V_GAP.toPx() }
-    val labelOffsetPx  = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.toPx() } // label + padding above
-    val connectorWidth = with(androidx.compose.ui.platform.LocalDensity.current) { (ROUND_GAP / 2).toPx() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val cardHeightPx    = with(density) { MATCH_CARD_HEIGHT.toPx() }
+    val matchVGapPx     = with(density) { MATCH_V_GAP.toPx() }
+    val labelHeightPx   = with(density) { BLOCK_LABEL_HEIGHT.toPx() }
+    val captionHeightPx = with(density) { BLOCK_CAPTION_HEIGHT.toPx() }
+    val labelGapPx      = with(density) { 6.dp.toPx() }
+    val captionGapPx    = with(density) { 4.dp.toPx() }
+    val connectorWidth  = with(density) { (ROUND_GAP / 2).toPx() }
 
-    // Total height = label + all cards + gaps between cards
-    val totalH = labelOffsetPx +
-            fromMatchCount * cardHeightPx +
-            (fromMatchCount - 1) * matchVGapPx
+    // Each match occupies a "block": label + spacing, the card itself, then a caption
+    val blockHeightPx  = labelHeightPx + labelGapPx + cardHeightPx + captionGapPx + captionHeightPx
+    // The card's vertical center sits this far down from the top of its block
+    val cardCenterOffsetPx = labelHeightPx + labelGapPx + cardHeightPx / 2f
+
+    val totalH = fromMatchCount * blockHeightPx + (fromMatchCount - 1) * matchVGapPx
 
     Canvas(
         modifier = Modifier
             .width(ROUND_GAP)
-            .height(with(androidx.compose.ui.platform.LocalDensity.current) { totalH.toDp() })
-            .padding(top = with(androidx.compose.ui.platform.LocalDensity.current) { labelOffsetPx.toDp() })
+            .height(with(density) { totalH.toDp() })
     ) {
         // Each pair of "from" cards connects to one "to" card
         for (i in 0 until toMatchCount) {
             val top    = i * 2       // top card in from-round
             val bottom = i * 2 + 1  // bottom card in from-round
 
-            val topCenterY = top * (cardHeightPx + matchVGapPx) + cardHeightPx / 2f
-            val botCenterY = bottom * (cardHeightPx + matchVGapPx) + cardHeightPx / 2f
+            val topCenterY = top * (blockHeightPx + matchVGapPx) + cardCenterOffsetPx
+            val botCenterY = bottom * (blockHeightPx + matchVGapPx) + cardCenterOffsetPx
             val midY       = (topCenterY + botCenterY) / 2f
 
             // Horizontal stub from top card
@@ -502,116 +569,206 @@ private fun BracketMatchCard(
     match:   Match,
     team1:   Team?,
     team2:   Team?,
-    onClick: (() -> Unit)?
+    onClick: (() -> Unit)?,
+    onNameClick: ((Team) -> Unit)? = null
 ) {
     val isBye       = match.status == MatchStatus.BYE
     val isCompleted = match.status == MatchStatus.COMPLETED
 
-    val cardColor = when {
-        isCompleted -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-        isBye       -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        else        -> MaterialTheme.colorScheme.surface
-    }
-    val borderColor = when {
-        isCompleted -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
-        else        -> MaterialTheme.colorScheme.outlineVariant
+    val team1Name = team1?.name ?: "TBD"
+    val team2Name = when {
+        team2 != null -> team2.name
+        isBye         -> "—"
+        else          -> "TBD"
     }
 
-    Surface(
-        onClick = onClick ?: {},
-        enabled = onClick != null,
-        shape = RoundedCornerShape(10.dp),
-        color = cardColor,
+    val team1IsWinner = match.winnerId != null && match.winnerId == match.team1Id
+    val team2IsWinner = match.winnerId != null && match.winnerId == match.team2Id
+
+    // When a slot auto-advances due to BYE, the known team's row is highlighted
+    val team1AutoAdvance = isBye && team1 != null
+    val team2AutoAdvance = isBye && team2 != null
+
+    val borderColor = if (isCompleted)
+        MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
+    else MaterialTheme.colorScheme.outlineVariant
+
+    Box(
         modifier = Modifier
             .width(MATCH_CARD_WIDTH)
             .height(MATCH_CARD_HEIGHT)
-            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            val team1Name = team1?.name ?: "TBD"
-            val team2Name = when {
-                team2 != null  -> team2.name
-                isBye          -> "BYE"
-                else           -> "TBD"
+        Surface(
+            onClick = onClick ?: {},
+            enabled = onClick != null,
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxSize()
+                .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+        ) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // ── Name column ─────────────────────────────────────────────
+                Column(modifier = Modifier.weight(1f)) {
+                    BracketNameRow(
+                        name = team1Name,
+                        isWinner = team1IsWinner,
+                        isAutoAdvance = team1AutoAdvance,
+                        onClick = if (onNameClick != null && team1 != null) { { onNameClick(team1) } } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                    HorizontalDivider(color = borderColor)
+                    BracketNameRow(
+                        name = team2Name,
+                        isWinner = team2IsWinner,
+                        isAutoAdvance = team2AutoAdvance,
+                        onClick = if (onNameClick != null && team2 != null) { { onNameClick(team2) } } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // ── Score column ────────────────────────────────────────────
+                if (isBye) {
+                    ByeChip(modifier = Modifier.width(SCORE_COL_WIDTH).fillMaxHeight())
+                } else {
+                    Column(modifier = Modifier.width(SCORE_COL_WIDTH)) {
+                        ScoreChip(
+                            score = match.score1,
+                            isWinner = team1IsWinner,
+                            isCompleted = isCompleted,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ScoreChip(
+                            score = match.score2,
+                            isWinner = team2IsWinner,
+                            isCompleted = isCompleted,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
-
-            BracketTeamRow(
-                name     = team1Name,
-                score    = match.score1,
-                isWinner = match.winnerId != null && match.winnerId == match.team1Id,
-                modifier = Modifier.weight(1f)
-            )
-            HorizontalDivider(color = borderColor)
-            BracketTeamRow(
-                name     = team2Name,
-                score    = match.score2,
-                isWinner = match.winnerId != null && match.winnerId == match.team2Id,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun BracketTeamRow(
-    name:     String,
-    score:    Int?,
-    isWinner: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.padding(horizontal = 10.dp)
-    ) {
-        if (isWinner) {
-            Surface(
-                shape  = CircleShape,
-                color  = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(6.dp)
-            ) {}
-            Spacer(Modifier.width(6.dp))
-        } else {
-            Spacer(Modifier.width(12.dp))
         }
 
-        Text(
-            name,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (isWinner) FontWeight.Bold else FontWeight.Normal,
-            color  = if (isWinner) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-
-        if (score != null) {
-            Spacer(Modifier.width(6.dp))
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = if (isWinner)
-                    MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
-            ) {
+        // ── "vs" badge overlapping the divider between the two rows ─────────
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier
+                .size(VS_BADGE_SIZE)
+                .align(Alignment.TopStart)
+                .offset(
+                    x = MATCH_CARD_WIDTH - SCORE_COL_WIDTH - (VS_BADGE_SIZE / 2),
+                    y = (MATCH_CARD_HEIGHT / 2) - (VS_BADGE_SIZE / 2)
+                )
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Text(
-                    score.toString(),
-                    style      = MaterialTheme.typography.labelSmall,
+                    "vs",
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (isWinner) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
 
-private fun roundLabel(index: Int, total: Int, matchCount: Int): String {
-    if (matchCount == 1) return "Final"
-    if (matchCount == 2) return "Semi-Finals"
-    if (matchCount == 4) return "Quarter-Finals"
-    return "Round ${index + 1}"
+@Composable
+private fun BracketNameRow(
+    name: String,
+    isWinner: Boolean,
+    isAutoAdvance: Boolean,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = when {
+        isWinner      -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        isAutoAdvance -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
+        else          -> Color.Transparent
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(bgColor)
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
+            .padding(horizontal = 10.dp)
+    ) {
+        Text(
+            name,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (isWinner || isAutoAdvance) FontWeight.Bold else FontWeight.Normal,
+            color = when {
+                isWinner      -> MaterialTheme.colorScheme.primary
+                isAutoAdvance -> MaterialTheme.colorScheme.onTertiaryContainer
+                else          -> MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
+
+@Composable
+private fun ScoreChip(
+    score: Int?,
+    isWinner: Boolean,
+    isCompleted: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                if (isWinner && isCompleted) MaterialTheme.colorScheme.primary else SCORE_CHIP_DARK
+            )
+    ) {
+        Text(
+            score?.toString() ?: "–",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (isWinner && isCompleted)
+                MaterialTheme.colorScheme.onPrimary
+            else Color.White.copy(alpha = if (score != null) 0.85f else 0.5f)
+        )
+    }
+}
+
+@Composable
+private fun ByeChip(modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            "BYE".forEach { letter ->
+                Text(
+                    letter.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+    }
+}
+
+/** Short round code used to build per-match labels, e.g. "QF" -> "QF · Game 2" */
+private fun roundShortLabel(matchCountInRound: Int): String = when (matchCountInRound) {
+    1    -> "Final"
+    2    -> "SF"
+    4    -> "QF"
+    else -> "R"
+}
+
+private fun matchLabel(roundShort: String, isFinal: Boolean, matchIndexInRound: Int): String =
+    if (isFinal) "Final" else "$roundShort · Game ${matchIndexInRound + 1}"
 
 // ── Standings tab ─────────────────────────────────────────────────────────────
 
@@ -787,6 +944,78 @@ private fun DetailTab.label() = when (this) {
     DetailTab.BRACKET       -> "Bracket"
     DetailTab.STANDINGS     -> "Standings"
     DetailTab.ANNOUNCEMENTS -> "Announcements"
+    DetailTab.PARTICIPANTS  -> "Participants"
+}
+
+// ── Participants tab (public tournaments only) ─────────────────────────────────
+
+@Composable
+private fun ParticipantsTab(state: TournamentDetailUiState) {
+    if (state.organizers.isEmpty() && state.teams.isEmpty()) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text("No participants yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (state.organizers.isNotEmpty()) {
+            item {
+                Text(
+                    "Organizers",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            items(state.organizers, key = { "org_${it.id}" }) { organizer ->
+                ParticipantRow(
+                    name = if (organizer.role == OrganizerRole.OWNER) "Owner" else "Organizer",
+                    subtitle = organizer.userId
+                )
+            }
+            item { Spacer(Modifier.height(8.dp)) }
+        }
+
+        item {
+            Text(
+                "Players / Teams",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+        if (state.teams.isEmpty()) {
+            item {
+                Text(
+                    "No one has joined yet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(state.teams, key = { "team_${it.id}" }) { team ->
+                ParticipantRow(name = team.name, subtitle = if (team.seed != null) "Seed ${team.seed}" else null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParticipantRow(name: String, subtitle: String?) {
+    Card(shape = RoundedCornerShape(8.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
 
 // ── Organizer overflow menu ───────────────────────────────────────────────────

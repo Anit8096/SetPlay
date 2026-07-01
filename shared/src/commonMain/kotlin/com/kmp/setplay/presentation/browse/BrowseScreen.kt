@@ -11,13 +11,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -41,6 +50,8 @@ import org.koin.compose.viewmodel.koinViewModel
 fun BrowseScreen(
     contentPadding: PaddingValues = PaddingValues(),
     modifier: Modifier = Modifier,
+    onTournamentSelected: (String) -> Unit = {},
+    onJoinTournament: () -> Unit = {},
     viewModel: BrowseViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -67,14 +78,45 @@ fun BrowseScreen(
                     onFormatFilter = { viewModel.onAction(BrowseAction.FormatFilterChanged(it)) },
                     onStatusFilter = { viewModel.onAction(BrowseAction.StatusFilterChanged(it)) },
                     filtered = viewModel.filteredTournaments,
-                    onRetry = { viewModel.onAction(BrowseAction.Refresh) }
+                    onRetry = { viewModel.onAction(BrowseAction.Refresh) },
+                    onJoinTournament = onJoinTournament,
+                    onJoinClicked = { viewModel.onAction(BrowseAction.JoinClicked(it)) }
                 )
                 BrowseSubTab.JOINED_LIVE -> ComingSoon("Tournaments you've joined will show up here")
                 BrowseSubTab.ORGANIZING_LIVE -> OrganizingContent(
                     isLoading = uiState.isOrganizingLoading,
-                    tournaments = uiState.organizingTournaments
+                    tournaments = uiState.organizingTournaments,
+                    onTournamentSelected = onTournamentSelected
                 )
             }
+        }
+
+        // ── Join dialog ──────────────────────────────────────────────────────────
+        uiState.joinDialogFor?.let { tournament ->
+            AlertDialog(
+                onDismissRequest = { viewModel.onAction(BrowseAction.DismissJoinDialog) },
+                title = { Text("Join ${tournament.name}") },
+                text = {
+                    OutlinedTextField(
+                        value = uiState.joinNameInput,
+                        onValueChange = { viewModel.onAction(BrowseAction.JoinNameChanged(it)) },
+                        placeholder = { Text("Your player or team name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.onAction(BrowseAction.ConfirmJoin) },
+                        enabled = uiState.joinNameInput.isNotBlank() && uiState.joiningTournamentId != tournament.id
+                    ) { Text("Join") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.onAction(BrowseAction.DismissJoinDialog) }) { Text("Cancel") }
+                },
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }
@@ -85,10 +127,27 @@ private fun DiscoverContent(
     onFormatFilter: (BracketFormat?) -> Unit,
     onStatusFilter: (TournamentStatus?) -> Unit,
     filtered: List<Tournament>,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onJoinTournament: () -> Unit,
+    onJoinClicked: (Tournament) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // ── Filters ──────────────────────────────────────────────────────────
+        // ── Join with code ────────────────────────────────────────────────────
+        OutlinedButton(
+            onClick = onJoinTournament,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Icon(
+                Icons.Default.QrCodeScanner,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Join with invite code")
+        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -167,7 +226,12 @@ private fun DiscoverContent(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filtered, key = { it.id }) { tournament ->
-                    DiscoverCard(tournament)
+                    PublicJoinCard(
+                        tournament = tournament,
+                        summary = uiState.participation[tournament.id],
+                        isJoining = uiState.joiningTournamentId == tournament.id,
+                        onJoinClick = { onJoinClicked(tournament) }
+                    )
                 }
             }
         }
@@ -177,7 +241,8 @@ private fun DiscoverContent(
 @Composable
 private fun OrganizingContent(
     isLoading: Boolean,
-    tournaments: List<Tournament>
+    tournaments: List<Tournament>,
+    onTournamentSelected: (String) -> Unit
 ) {
     when {
         isLoading -> Box(
@@ -202,15 +267,89 @@ private fun OrganizingContent(
             modifier = Modifier.fillMaxSize()
         ) {
             items(tournaments, key = { it.id }) { tournament ->
-                DiscoverCard(tournament)
+                DiscoverCard(
+                    tournament = tournament,
+                    onClick = { onTournamentSelected(tournament.id) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun DiscoverCard(tournament: Tournament) {
+private fun PublicJoinCard(
+    tournament: Tournament,
+    summary: com.kmp.setplay.domain.repository.ParticipationSummary?,
+    isJoining: Boolean,
+    onJoinClick: () -> Unit
+) {
+    val hasJoined = summary?.hasJoined == true
+    val count = summary?.participantCount ?: 0
+
     Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        tournament.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        tournament.format.shortLabel(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                StatusBadge(tournament.status)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (tournament.inviteCode != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            tournament.inviteCode,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+                Text(
+                    "$count joined",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Button(
+                    onClick = onJoinClick,
+                    enabled = !hasJoined && !isJoining &&
+                        tournament.status == TournamentStatus.REGISTRATION,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(if (hasJoined) "Joined" else "Join")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverCard(tournament: Tournament, onClick: () -> Unit = {}) {
+    Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),

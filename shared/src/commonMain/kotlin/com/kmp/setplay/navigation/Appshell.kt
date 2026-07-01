@@ -30,6 +30,7 @@ import com.kmp.setplay.presentation.browse.BrowseScreen
 import com.kmp.setplay.presentation.history.HistoryScreen
 import com.kmp.setplay.presentation.home.HomeScreen
 import com.kmp.setplay.presentation.profile.ProfileScreen
+import com.kmp.setplay.presentation.tournament.join.JoinTournamentScreen
 
 private enum class Tab(
     val selectedIcon: ImageVector,
@@ -46,6 +47,8 @@ private enum class Tab(
 @Composable
 fun AppShell(
     onFormatSelected: (BracketFormat) -> Unit,
+    onTournamentSelected: (String) -> Unit,
+    onJoinTournament: () -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(Tab.HOME) }
 
@@ -95,8 +98,15 @@ fun AppShell(
                 onFormatSelected = onFormatSelected,
                 contentPadding = innerPadding
             )
-            Tab.BROWSE  -> BrowseScreen(contentPadding = innerPadding)
-            Tab.HISTORY -> HistoryScreen(contentPadding = innerPadding)
+            Tab.BROWSE  -> BrowseScreen(
+                contentPadding = innerPadding,
+                onTournamentSelected = onTournamentSelected,
+                onJoinTournament = onJoinTournament
+            )
+            Tab.HISTORY -> HistoryScreen(
+                contentPadding = innerPadding,
+                onTournamentSelected = onTournamentSelected
+            )
             Tab.PROFILE -> ProfileScreen(contentPadding = innerPadding)
         }
     }

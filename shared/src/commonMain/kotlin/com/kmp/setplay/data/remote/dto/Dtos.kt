@@ -36,13 +36,15 @@ data class TournamentDto(
     @SerialName("invite_code") val inviteCode: String?,
     @SerialName("max_teams")   val maxTeams: Int,
     @SerialName("is_public")   val isPublic: Boolean,
+    @SerialName("registration_deadline") val registrationDeadline: Instant? = null,
     @SerialName("created_at")  val createdAt: Instant,
     @SerialName("updated_at")  val updatedAt: Instant
 ) {
     fun toDomain() = Tournament(
         id = id, name = name, format = format, status = status,
         createdBy = createdBy, inviteCode = inviteCode, maxTeams = maxTeams,
-        isPublic = isPublic, createdAt = createdAt, updatedAt = updatedAt
+        isPublic = isPublic, registrationDeadline = registrationDeadline,
+        createdAt = createdAt, updatedAt = updatedAt
     )
 }
 
@@ -54,11 +56,12 @@ data class TeamDto(
     val name: String,
     val seed: Int?,
     @SerialName("logo_url")   val logoUrl: String?,
+    @SerialName("user_id")    val userId: String? = null,
     @SerialName("created_at") val createdAt: Instant
 ) {
     fun toDomain() = Team(
         id = id, tournamentId = tournamentId, name = name,
-        seed = seed, logoUrl = logoUrl, createdAt = createdAt
+        seed = seed, logoUrl = logoUrl, userId = userId, createdAt = createdAt
     )
 }
 
@@ -102,13 +105,15 @@ data class MatchDto(
     @SerialName("loser_id")            val loserId: String?,
     val status: MatchStatus,
     @SerialName("next_match_id")       val nextMatchId: String?,
-    @SerialName("next_loser_match_id") val nextLoserMatchId: String?
+    @SerialName("next_loser_match_id") val nextLoserMatchId: String?,
+    @SerialName("scheduled_at")        val scheduledAt: Instant? = null
 ) {
     fun toDomain() = Match(
         id = id, roundId = roundId, tournamentId = tournamentId,
         matchNumber = matchNumber, team1Id = team1Id, team2Id = team2Id,
         score1 = score1, score2 = score2, winnerId = winnerId, loserId = loserId,
-        status = status, nextMatchId = nextMatchId, nextLoserMatchId = nextLoserMatchId
+        status = status, nextMatchId = nextMatchId, nextLoserMatchId = nextLoserMatchId,
+        scheduledAt = scheduledAt
     )
 }
 
@@ -185,13 +190,20 @@ data class TournamentOrganizerDto(
 data class InsertTeamRequestDto(
     @SerialName("tournament_id") val tournamentId: String,
     val name: String,
-    val seed: Int?
+    val seed: Int?,
+    @SerialName("user_id") val userId: String? = null
 )
 
 // Used in: renameTeam — updates just the team name
 @Serializable
 data class UpdateTeamRequestDto(
     val name: String
+)
+
+// Used in: setMatchSchedule — stores the date/time picked for a single match
+@Serializable
+data class UpdateMatchScheduleRequestDto(
+    @SerialName("scheduled_at") val scheduledAt: Instant?
 )
 
 // Used in: updateMatch — sets score, winner, loser, status on completion
@@ -228,5 +240,6 @@ data class UpdateTournamentRequestDto(
     val name: String,
     val status: TournamentStatus,
     @SerialName("is_public") val isPublic: Boolean,
-    @SerialName("max_teams") val maxTeams: Int
+    @SerialName("max_teams") val maxTeams: Int,
+    @SerialName("registration_deadline") val registrationDeadline: Instant? = null
 )
