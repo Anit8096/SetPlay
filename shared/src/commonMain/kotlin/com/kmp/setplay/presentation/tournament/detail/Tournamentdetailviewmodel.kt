@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.OrganizerRole
+import com.kmp.setplay.domain.model.ShareViewer
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
@@ -50,6 +51,11 @@ data class TournamentDetailUiState(
     val schedulingMatch: Match? = null,
     // Share code
     val showShareCode: Boolean = false,
+    // Share code access — private tournaments only
+    val accessRevoked: Boolean = false,
+    val viewers: List<ShareViewer> = emptyList(),
+    val showAccessList: Boolean = false,
+    val isLoadingViewers: Boolean = false,
     // Confirmation dialogs (owner only)
     val confirmEndTournament: Boolean = false,
     val confirmDeleteTournament: Boolean = false,
@@ -97,6 +103,11 @@ sealed interface TournamentDetailAction {
     data object ShowShareCode : TournamentDetailAction
     data object DismissShareCode : TournamentDetailAction
 
+    // Share code access list (organizer only, private tournaments)
+    data object ShowAccessList : TournamentDetailAction
+    data object DismissAccessList : TournamentDetailAction
+    data class ToggleViewerAccess(val viewer: ShareViewer) : TournamentDetailAction
+
     // End / Delete (owner only)
     data object RequestEndTournament : TournamentDetailAction
     data object ConfirmEndTournament : TournamentDetailAction
@@ -131,7 +142,47 @@ class TournamentDetailViewModel(
                     _uiState.update {
                         it.copy(organizerRole = role, isOrganizer = role != null)
                     }
+                    // Only non-organizers viewing a private tournament are "share-code viewers".
+                    if (role == null) trackShareViewIfNeeded(userId)
                 }
+        }
+    }
+
+    /** Records a share-code view + checks for revocation, but only for private tournaments. */
+    private fun trackShareViewIfNeeded(userId: String) {
+        viewModelScope.launch {
+            val tournament = tournamentRepository.observeTournament(tournamentId).first() ?: return@launch
+            if (tournament.isPublic) return@launch
+
+            tournamentRepository.recordShareView(tournamentId, userId)
+            tournamentRepository.isShareAccessRevoked(tournamentId, userId)
+                .onSuccess { revoked -> _uiState.update { it.copy(accessRevoked = revoked) } }
+        }
+    }
+
+    private fun fetchViewers() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingViewers = true) }
+            tournamentRepository.getShareViewers(tournamentId)
+                .onSuccess { list -> _uiState.update { it.copy(viewers = list, isLoadingViewers = false) } }
+                .onFailure { e ->
+                    _uiState.update {
+                        it.copy(isLoadingViewers = false, error = e.message ?: "Couldn't load access list")
+                    }
+                }
+        }
+    }
+
+    private fun toggleViewerAccess(viewer: ShareViewer) {
+        viewModelScope.launch {
+            val result = if (viewer.revoked) {
+                tournamentRepository.restoreShareAccess(tournamentId, viewer.userId)
+            } else {
+                tournamentRepository.revokeShareAccess(tournamentId, viewer.userId)
+            }
+            result
+                .onSuccess { fetchViewers() }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message ?: "Couldn't update access") } }
         }
     }
 
@@ -175,6 +226,10 @@ class TournamentDetailViewModel(
                         renameTeamInput = current.renameTeamInput,
                         schedulingMatch = current.schedulingMatch,
                         showShareCode = current.showShareCode,
+                        accessRevoked = current.accessRevoked,
+                        viewers = current.viewers,
+                        showAccessList = current.showAccessList,
+                        isLoadingViewers = current.isLoadingViewers,
                         confirmEndTournament = current.confirmEndTournament,
                         confirmDeleteTournament = current.confirmDeleteTournament,
                         tournament = if (current.tournamentDeleted) current.tournament else newState.tournament,
@@ -252,6 +307,17 @@ class TournamentDetailViewModel(
 
             TournamentDetailAction.DismissShareCode ->
                 _uiState.update { it.copy(showShareCode = false) }
+
+            // ── Access list ───────────────────────────────────────────────────
+            TournamentDetailAction.ShowAccessList -> {
+                _uiState.update { it.copy(showAccessList = true) }
+                fetchViewers()
+            }
+
+            TournamentDetailAction.DismissAccessList ->
+                _uiState.update { it.copy(showAccessList = false) }
+
+            is TournamentDetailAction.ToggleViewerAccess -> toggleViewerAccess(action.viewer)
 
             // ── End ────────────────────────────────────────────────────────────
             TournamentDetailAction.RequestEndTournament ->

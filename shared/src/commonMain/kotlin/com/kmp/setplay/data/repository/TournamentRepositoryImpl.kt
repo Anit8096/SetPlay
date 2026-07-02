@@ -7,13 +7,16 @@ import com.kmp.setplay.data.remote.dto.InsertTeamRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateTeamRequestDto
 import com.kmp.setplay.data.remote.dto.InsertTournamentRequestDto
 import com.kmp.setplay.data.remote.dto.MatchDto
+import com.kmp.setplay.data.remote.dto.RecordShareViewRequestDto
 import com.kmp.setplay.data.remote.dto.RoundDto
+import com.kmp.setplay.data.remote.dto.ShareViewerDto
 import com.kmp.setplay.data.remote.dto.StandingDto
 import com.kmp.setplay.data.remote.dto.TeamDto
 import com.kmp.setplay.data.remote.dto.TournamentDto
 import com.kmp.setplay.data.remote.dto.TournamentOrganizerDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchResultRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchScheduleRequestDto
+import com.kmp.setplay.data.remote.dto.UpdateShareViewerRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateTournamentRequestDto
 import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
 import com.kmp.setplay.domain.model.Announcement
@@ -21,6 +24,7 @@ import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.MatchStatus
 import com.kmp.setplay.domain.model.OrganizerRole
+import com.kmp.setplay.domain.model.ShareViewer
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
@@ -444,6 +448,59 @@ class TournamentRepositoryImpl(
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<TournamentOrganizerDto>()
             .map { it.toDomain() }
+    }
+
+    // ── Share code access ────────────────────────────────────────────────────
+
+    override suspend fun recordShareView(tournamentId: String, userId: String): Result<Unit> = runCatching {
+        supabase.postgrest["tournament_share_views"]
+            .upsert(
+                RecordShareViewRequestDto(
+                    tournamentId = tournamentId,
+                    userId = userId,
+                    lastViewedAt = kotlin.time.Clock.System.now()
+                )
+            ) { onConflict = "tournament_id,user_id" }
+    }
+
+    override suspend fun isShareAccessRevoked(tournamentId: String, userId: String): Result<Boolean> = runCatching {
+        supabase.postgrest["tournament_share_views"]
+            .select {
+                filter {
+                    eq("tournament_id", tournamentId)
+                    eq("user_id", userId)
+                }
+            }
+            .decodeList<ShareViewerDto>()
+            .firstOrNull()?.revoked ?: false
+    }
+
+    override suspend fun getShareViewers(tournamentId: String): Result<List<ShareViewer>> = runCatching {
+        supabase.postgrest["tournament_share_views"]
+            .select { filter { eq("tournament_id", tournamentId) } }
+            .decodeList<ShareViewerDto>()
+            .map { it.toDomain() }
+            .sortedByDescending { it.lastViewedAt }
+    }
+
+    override suspend fun revokeShareAccess(tournamentId: String, userId: String): Result<Unit> = runCatching {
+        supabase.postgrest["tournament_share_views"]
+            .update(UpdateShareViewerRequestDto(revoked = true)) {
+                filter {
+                    eq("tournament_id", tournamentId)
+                    eq("user_id", userId)
+                }
+            }
+    }
+
+    override suspend fun restoreShareAccess(tournamentId: String, userId: String): Result<Unit> = runCatching {
+        supabase.postgrest["tournament_share_views"]
+            .update(UpdateShareViewerRequestDto(revoked = false)) {
+                filter {
+                    eq("tournament_id", tournamentId)
+                    eq("user_id", userId)
+                }
+            }
     }
 
     // ── Realtime ──────────────────────────────────────────────────────────────

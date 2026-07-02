@@ -228,8 +228,16 @@ class CreateTournamentViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // maxTeams: use actual count when No Limit, else the chosen cap
-            val maxTeams = state.maxSize ?: state.participants.size
+            // maxTeams: for private tournaments "No Limit" resolves to the actual roster
+            // size, since the private roster is fixed at creation. For public tournaments
+            // there's no roster to count at creation (participants self-register later),
+            // so "No Limit" is 0 — an explicit sentinel meaning "no cap enforced", not a
+            // leftover empty-list artifact. Anywhere maxTeams is displayed treats 0 this way.
+            val maxTeams = when {
+                state.maxSize != null -> state.maxSize
+                state.isPublic -> 0
+                else -> state.participants.size
+            }
 
             val tournamentResult = tournamentRepository.createTournament(
                 name = state.name,

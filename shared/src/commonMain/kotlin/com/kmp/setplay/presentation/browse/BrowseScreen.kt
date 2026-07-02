@@ -18,23 +18,34 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,9 +54,12 @@ import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.model.TournamentStatus
+import com.kmp.setplay.isAndroidPlatform
 import com.kmp.setplay.presentation.common.ContentContainer
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowseScreen(
     contentPadding: PaddingValues = PaddingValues(),
@@ -55,68 +69,111 @@ fun BrowseScreen(
     viewModel: BrowseViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    ContentContainer(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            SecondaryTabRow(selectedTabIndex = uiState.selectedSubTab.ordinal) {
-                BrowseSubTab.entries.forEach { tab ->
-                    Tab(
-                        selected = uiState.selectedSubTab == tab,
-                        onClick = { viewModel.onAction(BrowseAction.SubTabSelected(tab)) },
-                        text = { Text(tab.label()) }
+    // All errors surface as a snackbar. Cleared via ErrorShown right after so a
+    // recomposition (e.g. from an unrelated state change) doesn't re-show it.
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.onAction(BrowseAction.ErrorShown)
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize().padding(contentPadding),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (uiState.selectedSubTab == BrowseSubTab.DISCOVER) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (isAndroidPlatform()) {
+                        // Stub — real QR scanning lands in Step 12 (ML Kit)
+                        SmallFloatingActionButton(
+                            onClick = {
+                                scope.launch { snackbarHostState.showSnackbar("QR scanning is coming soon") }
+                            }
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR to join")
+                        }
+                    } else {
+                        // No touch-drag on Web/Desktop mouse, so pull-to-refresh can't be
+                        // triggered there — this is the Web equivalent.
+                        SmallFloatingActionButton(
+                            onClick = { viewModel.onAction(BrowseAction.Refresh) }
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
+                    }
+                    ExtendedFloatingActionButton(
+                        onClick = onJoinTournament,
+                        icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
+                        text = { Text("Join with code") }
+                    )
+                }
+            }
+        }
+    ) { fabPadding ->
+        ContentContainer(
+            modifier = Modifier.fillMaxSize().padding(fabPadding)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                SecondaryTabRow(selectedTabIndex = uiState.selectedSubTab.ordinal) {
+                    BrowseSubTab.entries.forEach { tab ->
+                        Tab(
+                            selected = uiState.selectedSubTab == tab,
+                            onClick = { viewModel.onAction(BrowseAction.SubTabSelected(tab)) },
+                            text = { Text(tab.label()) }
+                        )
+                    }
+                }
+
+                when (uiState.selectedSubTab) {
+                    BrowseSubTab.DISCOVER -> DiscoverContent(
+                        uiState = uiState,
+                        onFormatFilter = { viewModel.onAction(BrowseAction.FormatFilterChanged(it)) },
+                        onStatusFilter = { viewModel.onAction(BrowseAction.StatusFilterChanged(it)) },
+                        onClearFilters = { viewModel.onAction(BrowseAction.ClearFilters) },
+                        filtered = viewModel.filteredTournaments,
+                        onRefresh = { viewModel.onAction(BrowseAction.Refresh) },
+                        onJoinClicked = { viewModel.onAction(BrowseAction.JoinClicked(it)) }
+                    )
+                    BrowseSubTab.JOINED_LIVE -> ComingSoon("Tournaments you've joined will show up here")
+                    BrowseSubTab.ORGANIZING_LIVE -> OrganizingContent(
+                        isLoading = uiState.isOrganizingLoading,
+                        tournaments = uiState.organizingTournaments,
+                        onTournamentSelected = onTournamentSelected
                     )
                 }
             }
 
-            when (uiState.selectedSubTab) {
-                BrowseSubTab.DISCOVER -> DiscoverContent(
-                    uiState = uiState,
-                    onFormatFilter = { viewModel.onAction(BrowseAction.FormatFilterChanged(it)) },
-                    onStatusFilter = { viewModel.onAction(BrowseAction.StatusFilterChanged(it)) },
-                    filtered = viewModel.filteredTournaments,
-                    onRetry = { viewModel.onAction(BrowseAction.Refresh) },
-                    onJoinTournament = onJoinTournament,
-                    onJoinClicked = { viewModel.onAction(BrowseAction.JoinClicked(it)) }
-                )
-                BrowseSubTab.JOINED_LIVE -> ComingSoon("Tournaments you've joined will show up here")
-                BrowseSubTab.ORGANIZING_LIVE -> OrganizingContent(
-                    isLoading = uiState.isOrganizingLoading,
-                    tournaments = uiState.organizingTournaments,
-                    onTournamentSelected = onTournamentSelected
+            // ── Join dialog ──────────────────────────────────────────────────────────
+            uiState.joinDialogFor?.let { tournament ->
+                AlertDialog(
+                    onDismissRequest = { viewModel.onAction(BrowseAction.DismissJoinDialog) },
+                    title = { Text("Join ${tournament.name}") },
+                    text = {
+                        OutlinedTextField(
+                            value = uiState.joinNameInput,
+                            onValueChange = { viewModel.onAction(BrowseAction.JoinNameChanged(it)) },
+                            placeholder = { Text("Your player or team name") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.onAction(BrowseAction.ConfirmJoin) },
+                            enabled = uiState.joinNameInput.isNotBlank() && uiState.joiningTournamentId != tournament.id
+                        ) { Text("Join") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.onAction(BrowseAction.DismissJoinDialog) }) { Text("Cancel") }
+                    },
+                    shape = RoundedCornerShape(16.dp)
                 )
             }
-        }
-
-        // ── Join dialog ──────────────────────────────────────────────────────────
-        uiState.joinDialogFor?.let { tournament ->
-            AlertDialog(
-                onDismissRequest = { viewModel.onAction(BrowseAction.DismissJoinDialog) },
-                title = { Text("Join ${tournament.name}") },
-                text = {
-                    OutlinedTextField(
-                        value = uiState.joinNameInput,
-                        onValueChange = { viewModel.onAction(BrowseAction.JoinNameChanged(it)) },
-                        placeholder = { Text("Your player or team name") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.onAction(BrowseAction.ConfirmJoin) },
-                        enabled = uiState.joinNameInput.isNotBlank() && uiState.joiningTournamentId != tournament.id
-                    ) { Text("Join") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.onAction(BrowseAction.DismissJoinDialog) }) { Text("Cancel") }
-                },
-                shape = RoundedCornerShape(16.dp)
-            )
         }
     }
 }
@@ -126,36 +183,28 @@ private fun DiscoverContent(
     uiState: BrowseUiState,
     onFormatFilter: (BracketFormat?) -> Unit,
     onStatusFilter: (TournamentStatus?) -> Unit,
+    onClearFilters: () -> Unit,
     filtered: List<Tournament>,
-    onRetry: () -> Unit,
-    onJoinTournament: () -> Unit,
+    onRefresh: () -> Unit,
     onJoinClicked: (Tournament) -> Unit
 ) {
+    PullToRefreshBox(
+        isRefreshing = uiState.isRefreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize()
+    ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // ── Join with code ────────────────────────────────────────────────────
-        OutlinedButton(
-            onClick = onJoinTournament,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Icon(
-                Icons.Default.QrCodeScanner,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text("Join with invite code")
-        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
                 FilterChip(
-                    selected = uiState.statusFilter == null,
-                    onClick = { onStatusFilter(null) },
+                    // "All" means no filter at all — both format AND status must be clear,
+                    // not just status, otherwise this stayed selected while a format
+                    // filter was active.
+                    selected = uiState.statusFilter == null && uiState.formatFilter == null,
+                    onClick = onClearFilters,
                     label = { Text("All") }
                 )
             }
@@ -198,17 +247,6 @@ private fun DiscoverContent(
                 modifier = Modifier.fillMaxSize()
             ) { CircularProgressIndicator() }
 
-            uiState.error != null -> Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize().padding(24.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(uiState.error, color = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onRetry) { Text("Retry") }
-                }
-            }
-
             filtered.isEmpty() -> Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize().padding(24.dp)
@@ -235,6 +273,7 @@ private fun DiscoverContent(
                 }
             }
         }
+    }
     }
 }
 
@@ -328,7 +367,10 @@ private fun PublicJoinCard(
                     Spacer(modifier = Modifier.width(10.dp))
                 }
                 Text(
-                    "$count joined",
+                    // maxTeams is 0 for a public "No Limit" tournament — the explicit
+                    // no-cap sentinel set in CreateTournamentViewModel — so fall back to
+                    // a plain count rather than showing "n/0".
+                    if (tournament.maxTeams > 0) "$count/${tournament.maxTeams} joined" else "$count joined",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -378,7 +420,7 @@ private fun DiscoverCard(tournament: Tournament, onClick: () -> Unit = {}) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "${tournament.maxTeams} max",
+                        if (tournament.maxTeams > 0) "${tournament.maxTeams} max" else "No limit",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

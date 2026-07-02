@@ -25,6 +25,9 @@ data class BrowseUiState(
     val formatFilter: BracketFormat? = null,
     val statusFilter: TournamentStatus? = null,
     val isLoading: Boolean = false,
+    // True while re-fetching Discover in the background (pull-to-refresh) — unlike
+    // isLoading, the existing list stays on screen while this is true.
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val organizingTournaments: List<Tournament> = emptyList(),
     val isOrganizingLoading: Boolean = false,
@@ -39,7 +42,9 @@ sealed interface BrowseAction {
     data class SubTabSelected(val tab: BrowseSubTab) : BrowseAction
     data class FormatFilterChanged(val format: BracketFormat?) : BrowseAction
     data class StatusFilterChanged(val status: TournamentStatus?) : BrowseAction
+    data object ClearFilters : BrowseAction
     data object Refresh : BrowseAction
+    data object ErrorShown : BrowseAction
 
     // Join flow (Discover card)
     data class JoinClicked(val tournament: Tournament) : BrowseAction
@@ -73,7 +78,10 @@ class BrowseViewModel(
                 _uiState.update { it.copy(formatFilter = action.format) }
             is BrowseAction.StatusFilterChanged ->
                 _uiState.update { it.copy(statusFilter = action.status) }
+            BrowseAction.ClearFilters ->
+                _uiState.update { it.copy(formatFilter = null, statusFilter = null) }
             BrowseAction.Refresh -> loadDiscover()
+            BrowseAction.ErrorShown -> _uiState.update { it.copy(error = null) }
 
             is BrowseAction.JoinClicked ->
                 _uiState.update { it.copy(joinDialogFor = action.tournament, joinNameInput = "") }
@@ -96,15 +104,28 @@ class BrowseViewModel(
 
     private fun loadDiscover() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            // If we already have a list on screen, this is a refresh (pull-to-refresh or
+            // Refresh action) — keep the old list visible and use the lighter isRefreshing
+            // flag instead of the full-screen isLoading spinner.
+            val isRefresh = _uiState.value.tournaments.isNotEmpty()
+            _uiState.update {
+                if (isRefresh) it.copy(isRefreshing = true, error = null)
+                else it.copy(isLoading = true, error = null)
+            }
             tournamentRepository.getPublicTournaments()
                 .onSuccess { tournaments ->
-                    _uiState.update { it.copy(isLoading = false, tournaments = tournaments) }
+                    _uiState.update {
+                        it.copy(isLoading = false, isRefreshing = false, tournaments = tournaments)
+                    }
                     loadParticipation(tournaments)
                 }
                 .onFailure {
                     _uiState.update {
-                        it.copy(isLoading = false, error = "Couldn't load tournaments — pull to retry")
+                        it.copy(
+                            isLoading = false,
+                            isRefreshing = false,
+                            error = "Couldn't load tournaments — pull to retry"
+                        )
                     }
                 }
         }

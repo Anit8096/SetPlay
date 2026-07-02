@@ -138,7 +138,9 @@ fun TournamentDetailScreen(
                         }
                         OrganizerOverflowMenu(
                             isOwner = state.organizerRole != null,
+                            isPrivate = state.tournament?.isPublic == false,
                             onRename = { onAction(TournamentDetailAction.ShowRenameDialog) },
+                            onShowAccessList = { onAction(TournamentDetailAction.ShowAccessList) },
                             onEnd = { onAction(TournamentDetailAction.RequestEndTournament) },
                             onDelete = { onAction(TournamentDetailAction.RequestDeleteTournament) }
                         )
@@ -157,6 +159,29 @@ fun TournamentDetailScreen(
                 modifier = Modifier.fillMaxSize().padding(innerPadding)
             ) {
                 CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        if (state.accessRevoked) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Access revoked",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "The organizer has revoked your access to this tournament via share code.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
             return@Scaffold
         }
@@ -318,6 +343,53 @@ fun TournamentDetailScreen(
                         )
                     }
                     Spacer(Modifier.height(32.dp))
+                }
+            }
+        }
+
+        // ── Access list bottom sheet (private tournaments, organizer only) ──────
+        if (state.showAccessList) {
+            val sheetState = rememberModalBottomSheetState()
+
+            ModalBottomSheet(
+                onDismissRequest = { onAction(TournamentDetailAction.DismissAccessList) },
+                sheetState = sheetState
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    Text("Access list", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Everyone who has opened this tournament with the share code",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(16.dp))
+
+                    when {
+                        state.isLoadingViewers -> Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp)
+                        ) { CircularProgressIndicator() }
+
+                        state.viewers.isEmpty() -> Text(
+                            "No one has viewed this tournament via share code yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 24.dp)
+                        )
+
+                        else -> Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(bottom = 24.dp)
+                        ) {
+                            state.viewers.forEach { viewer ->
+                                AccessListRow(
+                                    viewer = viewer,
+                                    onToggle = { onAction(TournamentDetailAction.ToggleViewerAccess(viewer)) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1018,12 +1090,47 @@ private fun ParticipantRow(name: String, subtitle: String?) {
     }
 }
 
+@Composable
+private fun AccessListRow(
+    viewer: com.kmp.setplay.domain.model.ShareViewer,
+    onToggle: () -> Unit
+) {
+    Card(shape = RoundedCornerShape(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    // No display-name profile yet — show a short, readable id fragment.
+                    "Viewer · ${viewer.userId.take(8)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "Last viewed ${formatMatchSchedule(viewer.lastViewedAt)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(onClick = onToggle) {
+                Text(
+                    if (viewer.revoked) "Restore" else "Revoke",
+                    color = if (viewer.revoked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
 // ── Organizer overflow menu ───────────────────────────────────────────────────
 
 @Composable
 private fun OrganizerOverflowMenu(
     isOwner: Boolean,
+    isPrivate: Boolean,
     onRename: () -> Unit,
+    onShowAccessList: () -> Unit,
     onEnd: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -1042,6 +1149,13 @@ private fun OrganizerOverflowMenu(
                 leadingIcon = { Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = null) },
                 onClick = { expanded = false; onRename() }
             )
+            if (isPrivate) {
+                DropdownMenuItem(
+                    text = { Text("Access list") },
+                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                    onClick = { expanded = false; onShowAccessList() }
+                )
+            }
             if (isOwner) {
                 HorizontalDivider()
                 DropdownMenuItem(

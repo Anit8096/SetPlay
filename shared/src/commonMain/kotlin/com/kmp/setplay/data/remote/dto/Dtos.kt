@@ -9,6 +9,7 @@ import com.kmp.setplay.domain.model.MatchStatus
 import com.kmp.setplay.domain.model.OrganizerRole
 import com.kmp.setplay.domain.model.Player
 import com.kmp.setplay.domain.model.Round
+import com.kmp.setplay.domain.model.ShareViewer
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
@@ -183,6 +184,22 @@ data class TournamentOrganizerDto(
     )
 }
 
+// Used in: TournamentRepository.getShareViewers
+@Serializable
+data class ShareViewerDto(
+    val id: String,
+    @SerialName("tournament_id")   val tournamentId: String,
+    @SerialName("user_id")         val userId: String,
+    @SerialName("first_viewed_at") val firstViewedAt: Instant,
+    @SerialName("last_viewed_at")  val lastViewedAt: Instant,
+    val revoked: Boolean
+) {
+    fun toDomain() = ShareViewer(
+        id = id, tournamentId = tournamentId, userId = userId,
+        firstViewedAt = firstViewedAt, lastViewedAt = lastViewedAt, revoked = revoked
+    )
+}
+
 // ── Network Requests (KMP Web Serialization) ──────────────────────────────────
 
 // Used in: addTeam
@@ -242,4 +259,20 @@ data class UpdateTournamentRequestDto(
     @SerialName("is_public") val isPublic: Boolean,
     @SerialName("max_teams") val maxTeams: Int,
     @SerialName("registration_deadline") val registrationDeadline: Instant? = null
+)
+
+// Used in: recordShareView — upsert on (tournament_id, user_id).
+// `revoked` is deliberately omitted so a viewer's own heartbeat can never
+// clear an organizer-set revocation.
+@Serializable
+data class RecordShareViewRequestDto(
+    @SerialName("tournament_id")  val tournamentId: String,
+    @SerialName("user_id")        val userId: String,
+    @SerialName("last_viewed_at") val lastViewedAt: Instant
+)
+
+// Used in: revokeShareAccess / restoreShareAccess
+@Serializable
+data class UpdateShareViewerRequestDto(
+    val revoked: Boolean
 )

@@ -5,6 +5,7 @@ import com.kmp.setplay.domain.model.Announcement
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Match
 import com.kmp.setplay.domain.model.OrganizerRole
+import com.kmp.setplay.domain.model.ShareViewer
 import com.kmp.setplay.domain.model.Standing
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
@@ -90,4 +91,22 @@ interface TournamentRepository {
 
     /** Sets or clears the scheduled date/time shown under a bracket match. */
     suspend fun setMatchSchedule(matchId: String, scheduledAt: Instant?): Result<Unit>
+
+
+    // ── Share code access (private tournaments) ─────────────────────────────────
+    /**
+     * Records/heartbeats that [userId] viewed a private tournament via its share code.
+     * Upserts on (tournamentId, userId) — never touches the `revoked` flag, so a
+     * viewer's own visit can never clear an organizer-set revocation.
+     */
+    suspend fun recordShareView(tournamentId: String, userId: String): Result<Unit>
+
+    /** Whether [userId]'s share-code access to [tournamentId] has been revoked by an organizer. */
+    suspend fun isShareAccessRevoked(tournamentId: String, userId: String): Result<Boolean>
+
+    /** Full list of users who have viewed a private tournament via share code — organizer only. */
+    suspend fun getShareViewers(tournamentId: String): Result<List<ShareViewer>>
+
+    suspend fun revokeShareAccess(tournamentId: String, userId: String): Result<Unit>
+    suspend fun restoreShareAccess(tournamentId: String, userId: String): Result<Unit>
 }

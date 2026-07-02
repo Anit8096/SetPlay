@@ -109,3 +109,14 @@ data class TournamentOrganizer(
     val role: OrganizerRole,
     @SerialName("created_at")    val createdAt: Instant
 )
+
+/** A user who has viewed a private tournament via its share code. */
+@Serializable
+data class ShareViewer(
+    val id: String,
+    @SerialName("tournament_id")   val tournamentId: String,
+    @SerialName("user_id")         val userId: String,
+    @SerialName("first_viewed_at") val firstViewedAt: Instant,
+    @SerialName("last_viewed_at")  val lastViewedAt: Instant,
+    val revoked: Boolean
+)
