@@ -28,6 +28,7 @@ interface LocalCache {
     fun observeTeams(tournamentId: String): Flow<List<Team>>
     suspend fun saveTeams(teams: List<Team>)
     suspend fun saveTeam(team: Team)
+    suspend fun deleteTeam(teamId: String)
 
     // ── Rounds ────────────────────────────────────────────────────────────────
     suspend fun saveRounds(rounds: List<Round>)

@@ -57,6 +57,11 @@ class NoOpLocalCache : LocalCache {
 
     override suspend fun deleteTournament(tournamentId: String) {
         _tournaments.update { current -> current.filter { it.id != tournamentId } }
+        // Mirror Room's cascade so deleted-tournament children don't linger in memory either.
+        _teams.update { current -> current.filter { it.tournamentId != tournamentId } }
+        _matches.update { current -> current.filter { it.tournamentId != tournamentId } }
+        _standings.update { current -> current.filter { it.tournamentId != tournamentId } }
+        _announcements.update { current -> current.filter { it.tournamentId != tournamentId } }
     }
 
     override suspend fun getTournamentByInviteCode(code: String): Tournament? =
@@ -76,6 +81,10 @@ class NoOpLocalCache : LocalCache {
 
     override suspend fun saveTeam(team: Team) {
         _teams.update { current -> current.filter { it.id != team.id } + team }
+    }
+
+    override suspend fun deleteTeam(teamId: String) {
+        _teams.update { current -> current.filter { it.id != teamId } }
     }
 
     // ── Rounds ────────────────────────────────────────────────────────────────

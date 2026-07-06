@@ -2,9 +2,11 @@ package com.kmp.setplay.presentation.tournament.create
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Team
 import com.kmp.setplay.domain.model.Tournament
+import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.TournamentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -251,6 +253,21 @@ class CreateTournamentViewModel(
             }
             val tournament = tournamentResult.getOrThrow()
 
+            if (state.isPublic) {
+                // Public tournaments have no roster yet — participants self-register later
+                // via Join/invite code. Generating a bracket now would both fail (needs >=2
+                // teams) and, if it somehow succeeded, would flip status to IN_PROGRESS and
+                // close registration before anyone could join. Just open registration instead;
+                // bracket generation happens later once the organizer starts the tournament.
+                tournamentRepository.updateTournament(tournament.copy(status = TournamentStatus.REGISTRATION))
+                    .onFailure { e ->
+                        _uiState.update { it.copy(isLoading = false, error = e.message) }
+                        return@launch
+                    }
+                _uiState.update { it.copy(isLoading = false, createdTournament = tournament) }
+                return@launch
+            }
+
             state.participants.forEach { participant ->
                 tournamentRepository.addTeam(
                     tournamentId = tournament.id,
@@ -262,7 +279,11 @@ class CreateTournamentViewModel(
                 }
             }
 
-            tournamentRepository.generateBracket(tournament.id).onFailure { e ->
+            tournamentRepository.generateBracket(
+                tournamentId = tournament.id,
+                seeding = SingleEliminationGenerator.Seeding.valueOf(state.seeding.name),
+                includeThirdPlace = state.thirdPlaceGame
+            ).onFailure { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
                 return@launch
             }

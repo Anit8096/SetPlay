@@ -40,8 +40,16 @@ class RoomLocalCache(
     override suspend fun saveTournament(tournament: Tournament) =
         tournamentDao.upsert(tournament.toEntity())
 
-    override suspend fun deleteTournament(tournamentId: String) =
+    override suspend fun deleteTournament(tournamentId: String) {
+        // Room has no @ForeignKey cascade (Supabase is the referential-integrity source of
+        // truth), so child rows must be cleared explicitly, or they'd orphan in the local DB.
+        teamDao.deleteByTournament(tournamentId)
+        roundDao.deleteByTournament(tournamentId)
+        matchDao.deleteByTournament(tournamentId)
+        standingDao.deleteByTournament(tournamentId)
+        announcementDao.deleteByTournament(tournamentId)
         tournamentDao.deleteById(tournamentId)
+    }
 
     override suspend fun getTournamentByInviteCode(code: String): Tournament? =
         tournamentDao.getTournamentByInviteCode(code)?.toDomain()
@@ -56,6 +64,9 @@ class RoomLocalCache(
 
     override suspend fun saveTeam(team: Team) =
         teamDao.upsert(team.toEntity())
+
+    override suspend fun deleteTeam(teamId: String) =
+        teamDao.deleteById(teamId)
 
     // ── Rounds ────────────────────────────────────────────────────────────────
 

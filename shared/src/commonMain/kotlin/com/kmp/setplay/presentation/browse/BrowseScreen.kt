@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -54,10 +53,12 @@ import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.model.TournamentStatus
-import com.kmp.setplay.isAndroidPlatform
 import com.kmp.setplay.presentation.common.ContentContainer
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
+
+expect fun isAndroidPlatform(): Boolean
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

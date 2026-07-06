@@ -30,7 +30,9 @@ class JoinTournamentViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        JoinTournamentUiState(codeInput = initialCode ?: "")
+        // Uppercase here too — manual entry always uppercases via CodeChanged, so a
+        // lowercase deep-link code would otherwise silently fail to match.
+        JoinTournamentUiState(codeInput = initialCode?.uppercase() ?: "")
     )
     val uiState: StateFlow<JoinTournamentUiState> = _uiState.asStateFlow()
 

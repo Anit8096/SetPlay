@@ -56,6 +56,9 @@ interface TeamDao {
 
     @Query("DELETE FROM teams WHERE tournament_id = :tournamentId")
     suspend fun deleteByTournament(tournamentId: String)
+
+    @Query("DELETE FROM teams WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao

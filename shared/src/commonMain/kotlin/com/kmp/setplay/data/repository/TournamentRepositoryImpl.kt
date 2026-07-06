@@ -240,11 +240,22 @@ class TournamentRepositoryImpl(
     override suspend fun deleteTeam(teamId: String): Result<Unit> = runCatching {
         supabase.postgrest["teams"]
             .delete { filter { eq("id", teamId) } }
+        // Without this the team lingers in Room/NoOp state until the next full remote
+        // refetch (e.g. app restart), since deletes aren't picked up by Realtime here.
+        cache.deleteTeam(teamId)
     }
 
     override suspend fun renameTeam(teamId: String, name: String): Result<Unit> = runCatching {
         supabase.postgrest["teams"]
             .update(UpdateTeamRequestDto(name = name)) { filter { eq("id", teamId) } }
+        val updated = supabase.postgrest["teams"]
+            .select { filter { eq("id", teamId) } }
+            .decodeSingle<TeamDto>()
+            .toDomain()
+        // Same reasoning as deleteTeam — write the confirmed remote result into the
+        // cache so the UI (Room Flow / NoOp StateFlow) actually reflects the rename
+        // instead of waiting for the next cold fetch.
+        cache.saveTeam(updated)
     }
 
     override suspend fun registerForTournament(
@@ -252,6 +263,23 @@ class TournamentRepositoryImpl(
         userId: String,
         displayName: String
     ): Result<Team> = runCatching {
+        val tournament = supabase.postgrest["tournaments"]
+            .select { filter { eq("id", tournamentId) } }
+            .decodeSingle<TournamentDto>()
+            .toDomain()
+
+        // maxTeams == 0 is the explicit "No Limit" sentinel (see CreateTournamentViewModel),
+        // not a real cap, so only enforce it when a real limit was set.
+        if (tournament.maxTeams > 0) {
+            val existingCount = supabase.postgrest["teams"]
+                .select { filter { eq("tournament_id", tournamentId) } }
+                .decodeList<TeamDto>()
+                .size
+            if (existingCount >= tournament.maxTeams) {
+                error("This tournament is full")
+            }
+        }
+
         val dto = supabase.postgrest["teams"]
             .insert(
                 InsertTeamRequestDto(
