@@ -20,17 +20,17 @@ kotlin {
     js {
         browser()
     }
-    
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
     }
-    
+
     android {
         namespace = "com.kmp.setplay.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
-    
+
         compilerOptions {
             jvmTarget = JvmTarget.JVM_11
         }
@@ -41,7 +41,7 @@ kotlin {
             isIncludeAndroidResources = true
         }
     }
-    
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
@@ -64,6 +64,11 @@ kotlin {
             // Navigation3
             implementation(libs.jetbrains.navigation3.ui)
             implementation(libs.jetbrains.lifecycle.viewmodelNavigation3)
+
+            // Material3 Adaptive — window size classes + list-detail scene strategy for Nav3
+            implementation(libs.jetbrains.material3.adaptive)
+            implementation(libs.jetbrains.material3.adaptive.layout)
+            implementation(libs.jetbrains.material3.adaptive.navigation3)
 
             // Koin
             implementation(libs.koin.core)

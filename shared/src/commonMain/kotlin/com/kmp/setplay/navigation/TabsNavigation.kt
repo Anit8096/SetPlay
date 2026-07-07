@@ -9,7 +9,6 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -18,6 +17,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -37,13 +40,15 @@ import com.kmp.setplay.presentation.browse.BrowseScreen
 import com.kmp.setplay.presentation.history.HistoryScreen
 import com.kmp.setplay.presentation.home.HomeScreen
 import com.kmp.setplay.presentation.profile.ProfileScreen
+import com.kmp.setplay.presentation.tournament.detail.TournamentDetailScreen
+import com.kmp.setplay.presentation.tournament.detail.TournamentDetailViewModel
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 
-// Local to this graph — mirrors AuthNavigation/TodoNavigation in the Nav3 nested-graphs
-// reference: only Route.MainApp.Tabs's own children are registered here, neither the
-// root NavGraph nor MainAppNavigation need to know about them.
+
 @OptIn(ExperimentalSerializationApi::class)
 private val tabsSavedStateConfiguration = SavedStateConfiguration {
     serializersModule = SerializersModule {
@@ -52,6 +57,7 @@ private val tabsSavedStateConfiguration = SavedStateConfiguration {
             subclass(Route.MainApp.Tabs.Browse::class, Route.MainApp.Tabs.Browse.serializer())
             subclass(Route.MainApp.Tabs.History::class, Route.MainApp.Tabs.History.serializer())
             subclass(Route.MainApp.Tabs.Profile::class, Route.MainApp.Tabs.Profile.serializer())
+            subclass(Route.MainApp.TournamentDetail::class, Route.MainApp.TournamentDetail.serializer())
         }
     }
 }
@@ -68,11 +74,10 @@ private enum class Tab(
     PROFILE(Icons.Filled.AccountCircle, Icons.Outlined.AccountCircle, "Profile", "Profile"),
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun TabsNavigation(
     onFormatSelected: (BracketFormat) -> Unit,
-    onTournamentSelected: (String) -> Unit,
     onJoinTournament: () -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(Tab.HOME) }
@@ -89,20 +94,26 @@ fun TabsNavigation(
         Tab.PROFILE -> profileBackStack
     }
 
+    val isShowingTournamentDetail = activeBackStack.lastOrNull() is Route.MainApp.TournamentDetail
+
+    val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        selectedTab.topBarTitle,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+            if (!isShowingTournamentDetail) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            selectedTab.topBarTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
                 )
-            )
+            }
         },
         bottomBar = {
             NavigationBar {
@@ -129,14 +140,13 @@ fun TabsNavigation(
                 rememberSaveableStateHolderNavEntryDecorator(),
                 rememberViewModelStoreNavEntryDecorator()
             ),
+            sceneStrategies = listOf(listDetailStrategy),
             onBack = {
                 if (activeBackStack.size > 1) {
                     activeBackStack.removeLastOrNull()
                 } else if (selectedTab != Tab.HOME) {
                     selectedTab = Tab.HOME
                 }
-                // Already on Home's root — nothing left to pop here; MainAppNavigation's
-                // own onBack takes over from this point (pops Route.MainApp.Tabs itself).
             },
             entryProvider = entryProvider {
                 entry<Route.MainApp.Tabs.Home> {
@@ -145,21 +155,42 @@ fun TabsNavigation(
                         contentPadding = innerPadding
                     )
                 }
-                entry<Route.MainApp.Tabs.Browse> {
+                entry<Route.MainApp.Tabs.Browse>(
+                    metadata = ListDetailSceneStrategy.listPane()
+                ) {
                     BrowseScreen(
                         contentPadding = innerPadding,
-                        onTournamentSelected = onTournamentSelected,
+                        onTournamentSelected = { tournamentId ->
+                            browseBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
+                        },
                         onJoinTournament = onJoinTournament
                     )
                 }
-                entry<Route.MainApp.Tabs.History> {
+                entry<Route.MainApp.Tabs.History>(
+                    metadata = ListDetailSceneStrategy.listPane()
+                ) {
                     HistoryScreen(
                         contentPadding = innerPadding,
-                        onTournamentSelected = onTournamentSelected
+                        onTournamentSelected = { tournamentId ->
+                            historyBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
+                        }
                     )
                 }
-                entry<Route.MainApp.Tabs.Profile> {
+                entry<Route.MainApp.Tabs.Profile>() {
                     ProfileScreen(contentPadding = innerPadding)
+                }
+                entry<Route.MainApp.TournamentDetail>(
+                    metadata = ListDetailSceneStrategy.detailPane()
+                ) { route ->
+                    val vm: TournamentDetailViewModel = koinViewModel(
+                        parameters = { parametersOf(route.tournamentId) }
+                    )
+                    val state by vm.uiState.collectAsStateWithLifecycle()
+                    TournamentDetailScreen(
+                        state = state,
+                        onAction = vm::onAction,
+                        onBack = { activeBackStack.removeLastOrNull() }
+                    )
                 }
             }
         )

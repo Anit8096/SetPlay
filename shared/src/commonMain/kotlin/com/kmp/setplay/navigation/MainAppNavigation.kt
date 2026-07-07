@@ -78,9 +78,6 @@ fun MainAppNavigation() {
                     onFormatSelected = { format ->
                         mainAppBackStack.add(Route.MainApp.CreateTournament(format))
                     },
-                    onTournamentSelected = { tournamentId ->
-                        mainAppBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
-                    },
                     onJoinTournament = {
                         mainAppBackStack.add(Route.MainApp.JoinTournament())
                     }
