@@ -4,6 +4,7 @@ import com.kmp.setplay.domain.repository.AuthRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
+import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,10 @@ class AuthRepositoryImpl(
         status is SessionStatus.Authenticated
     }
 
+    override val isInitializing: Flow<Boolean> = supabase.auth.sessionStatus.map { status ->
+        status is SessionStatus.Initializing
+    }
+
     override val isAnonymous: Flow<Boolean> = supabase.auth.sessionStatus.map { status ->
         when (status) {
             is SessionStatus.Authenticated -> status.session.user?.isAnonymous ?: false
@@ -36,6 +41,16 @@ class AuthRepositoryImpl(
 
     override suspend fun signInWithGoogle(): Result<Unit> = runCatching {
         supabase.auth.signInWith(Google)
+    }
+
+    override suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String?): Result<Unit> = runCatching {
+        supabase.auth.signInWith(IDToken) {
+            this.idToken = idToken
+            this.provider = Google
+            if (rawNonce != null) {
+                this.nonce = rawNonce
+            }
+        }
     }
 
     override suspend fun linkGoogle(): Result<Unit> = runCatching {

@@ -15,6 +15,7 @@ plugins {
 
 val supabaseUrl: String = rootProject.extra["supabaseUrl"] as String
 val supabaseAnonKey: String = rootProject.extra["supabaseAnonKey"] as String
+val googleWebClientId: String = rootProject.extra["googleWebClientId"] as String
 
 kotlin {
     js {
@@ -45,11 +46,16 @@ kotlin {
     sourceSets {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
-
             implementation(libs.ktor.client.okhttp)
             implementation(libs.sqlite.bundled)
+
             // QR scanning — Android only
             implementation(libs.mlkit.barcode)
+
+            // Native Google Sign-In — Credential Manager
+            implementation(libs.androidx.credentials)
+            implementation(libs.androidx.credentials.play.services.auth)
+            implementation(libs.googleid)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -137,5 +143,6 @@ buildkonfig {
     defaultConfigs {
         buildConfigField(STRING, "SUPABASE_URL", supabaseUrl)
         buildConfigField(STRING, "SUPABASE_ANON_KEY", supabaseAnonKey)
+        buildConfigField(STRING, "GOOGLE_WEB_CLIENT_ID", googleWebClientId)
     }
 }

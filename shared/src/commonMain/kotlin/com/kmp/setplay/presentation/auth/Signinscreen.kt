@@ -73,8 +73,8 @@ fun SignInScreen(
 
                 Spacer(Modifier.height(32.dp))
 
-                // Android → native Credential Manager (compose-auth)
-                // Web    → browser OAuth flow
+                // Android → native Credential Manager
+                // Web    → Google Identity Services (falls back to browser OAuth if it fails)
                 GoogleSignInButton(
                     isLoading = state.isLoading,
                     onFallback = { onAction(AuthAction.SignInWithGoogle) },

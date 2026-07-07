@@ -12,11 +12,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.kmp.setplay.presentation.auth.AuthViewModel
 import org.koin.compose.viewmodel.koinViewModel
 
-/**
- * Root graph — only knows about the two top-level graphs, Route.Auth and Route.MainApp.
- * Everything else (SignIn, Tabs, CreateTournament, TournamentDetail, JoinTournament,
- * Settings) lives inside AuthNavigation.kt / MainAppNavigation.kt / TabsNavigation.kt.
- */
+
 @Composable
 fun NavGraph() {
     val authViewModel: AuthViewModel = koinViewModel()

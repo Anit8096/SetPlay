@@ -1,29 +1,27 @@
 package com.kmp.setplay.presentation.auth
 
+import android.content.Context
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.Google
+import androidx.compose.ui.platform.LocalContext
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
+import com.kmp.setplay.BuildKonfig
+import com.kmp.setplay.domain.repository.AuthRepository
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import java.security.MessageDigest
+import java.util.UUID
 
-/**
- * Android actual.
- *
- * NOTE: supabase-kt compose-auth (GoogleAuthButton / rememberSignInWithGoogle)
- * requires the Google Identity Services SDK and additional Gradle setup.
- * If you haven't added that yet, this uses a plain button that triggers
- * the browser OAuth flow via supabase.auth.signInWith(OAuthProvider.Google).
- *
- * To upgrade to native One Tap later:
- * 1. Add `implementation("io.github.jan-tennert.supabase:compose-auth")` to androidMain
- * 2. Add Google Identity Services to your androidApp build.gradle.kts
- * 3. Replace the body below with rememberSignInWithGoogle + GoogleAuthButton
- */
 @Composable
 actual fun GoogleSignInButton(
     isLoading: Boolean,
@@ -31,22 +29,74 @@ actual fun GoogleSignInButton(
     onError: (String) -> Unit,
     modifier: Modifier  // no default value on actual
 ) {
-    val supabase = koinInject<SupabaseClient>()
+    val authRepository = koinInject<AuthRepository>()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     OutlinedButton(
         onClick = {
             scope.launch {
-                runCatching {
-                    supabase.auth.signInWith(Google)
-                }.onFailure { e ->
-                    onError(e.message ?: "Google sign-in failed")
-                }
+                signInWithCredentialManager(context, authRepository, onError)
             }
         },
         enabled = !isLoading,
         modifier = modifier
     ) {
         Text("Continue with Google")
+    }
+}
+
+private suspend fun signInWithCredentialManager(
+    context: Context,
+    authRepository: AuthRepository,
+    onError: (String) -> Unit
+) {
+    // Supabase hashes our raw nonce (SHA-256, hex) and compares it to the one Google
+    // embeds inside the returned ID token — Google gets the hashed version, Supabase's
+    // signInWith(IDToken) gets the raw one.
+    val rawNonce = UUID.randomUUID().toString()
+    val hashedNonce = MessageDigest.getInstance("SHA-256")
+        .digest(rawNonce.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+
+    val googleIdOption = GetGoogleIdOption.Builder()
+        .setFilterByAuthorizedAccounts(false)
+        .setServerClientId(BuildKonfig.GOOGLE_WEB_CLIENT_ID)
+        .setNonce(hashedNonce)
+        .build()
+
+    val request = GetCredentialRequest.Builder()
+        .addCredentialOption(googleIdOption)
+        .build()
+
+    try {
+        val credentialManager = CredentialManager.create(context)
+        val result = credentialManager.getCredential(context, request)
+        val credential = result.credential
+
+        if (credential !is CustomCredential ||
+            credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+        ) {
+            onError("Unexpected credential type from Credential Manager")
+            return
+        }
+
+        val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+
+        authRepository.signInWithGoogleIdToken(
+            idToken = googleIdTokenCredential.idToken,
+            rawNonce = rawNonce
+        ).onFailure { e ->
+            onError(e.message ?: "Google sign-in failed")
+        }
+        // Success: sessionStatus flips to Authenticated on its own; NavGraph reacts to that.
+    } catch (e: GetCredentialCancellationException) {
+        // User dismissed the picker — nothing to report.
+    } catch (e: GoogleIdTokenParsingException) {
+        onError("Couldn't read Google credential: ${e.message}")
+    } catch (e: GetCredentialException) {
+        onError(e.message ?: "Google sign-in failed")
+    } catch (e: Exception) {
+        onError(e.message ?: "Google sign-in failed")
     }
 }

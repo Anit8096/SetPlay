@@ -12,19 +12,26 @@ import io.github.jan.supabase.functions.Functions
 expect fun provideSupabaseUrl(): String
 expect fun provideSupabaseKey(): String
 
-fun createSetPlaySupabaseClient(): SupabaseClient = createSupabaseClient(
-    supabaseUrl = provideSupabaseUrl(),
-    supabaseKey = provideSupabaseKey()
-) {
-    install(Auth) {
-        alwaysAutoRefresh = true
-        autoLoadFromStorage = true
-        sessionManager = SettingsSessionManager()
-        scheme = "setplay"
-        host = "login-callback"
+expect fun provideGoogleWebClientId(): String
+
+
+private val setPlaySupabaseClient: SupabaseClient by lazy {
+    createSupabaseClient(
+        supabaseUrl = provideSupabaseUrl(),
+        supabaseKey = provideSupabaseKey()
+    ) {
+        install(Auth) {
+            alwaysAutoRefresh = true
+            autoLoadFromStorage = true
+            sessionManager = SettingsSessionManager()
+            scheme = "setplay"
+            host = "login-callback"
+        }
+        install(Postgrest)
+        install(Realtime)
+        install(Storage)
+        install(Functions)
     }
-    install(Postgrest)
-    install(Realtime)
-    install(Storage)
-    install(Functions)
 }
+
+fun createSetPlaySupabaseClient(): SupabaseClient = setPlaySupabaseClient
