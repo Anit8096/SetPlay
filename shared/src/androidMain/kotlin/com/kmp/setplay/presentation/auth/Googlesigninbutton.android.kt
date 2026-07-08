@@ -51,9 +51,6 @@ private suspend fun signInWithCredentialManager(
     authRepository: AuthRepository,
     onError: (String) -> Unit
 ) {
-    // Supabase hashes our raw nonce (SHA-256, hex) and compares it to the one Google
-    // embeds inside the returned ID token — Google gets the hashed version, Supabase's
-    // signInWith(IDToken) gets the raw one.
     val rawNonce = UUID.randomUUID().toString()
     val hashedNonce = MessageDigest.getInstance("SHA-256")
         .digest(rawNonce.toByteArray())
@@ -89,9 +86,7 @@ private suspend fun signInWithCredentialManager(
         ).onFailure { e ->
             onError(e.message ?: "Google sign-in failed")
         }
-        // Success: sessionStatus flips to Authenticated on its own; NavGraph reacts to that.
-    } catch (e: GetCredentialCancellationException) {
-        // User dismissed the picker — nothing to report.
+
     } catch (e: GoogleIdTokenParsingException) {
         onError("Couldn't read Google credential: ${e.message}")
     } catch (e: GetCredentialException) {

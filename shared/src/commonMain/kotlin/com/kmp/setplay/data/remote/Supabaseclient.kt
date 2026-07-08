@@ -12,8 +12,6 @@ import io.github.jan.supabase.functions.Functions
 expect fun provideSupabaseUrl(): String
 expect fun provideSupabaseKey(): String
 
-expect fun provideGoogleWebClientId(): String
-
 
 private val setPlaySupabaseClient: SupabaseClient by lazy {
     createSupabaseClient(

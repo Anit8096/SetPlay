@@ -13,7 +13,12 @@ data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val isAuthenticated: Boolean = false,
-    val isAnonymous: Boolean = false
+    val isAnonymous: Boolean = false,
+    // True until the Supabase session (stored session / auto-refresh) has been
+    // resolved. NavGraph waits on this before deciding whether to start on the
+    // Auth graph or the MainApp graph, so we never briefly show sign-in before
+    // flipping to an already-authenticated session.
+    val isInitializing: Boolean = true
 )
 
 sealed interface AuthAction {
@@ -41,6 +46,11 @@ class AuthViewModel(
         viewModelScope.launch {
             authRepository.isAnonymous.collect { anonymous ->
                 _uiState.update { it.copy(isAnonymous = anonymous) }
+            }
+        }
+        viewModelScope.launch {
+            authRepository.isInitializing.collect { initializing ->
+                _uiState.update { it.copy(isInitializing = initializing) }
             }
         }
     }

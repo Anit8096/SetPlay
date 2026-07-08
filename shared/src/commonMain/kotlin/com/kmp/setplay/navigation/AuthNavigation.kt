@@ -26,22 +26,15 @@ private val authSavedStateConfiguration = SavedStateConfiguration {
     }
 }
 
-/**
- * Self-contained auth graph. Currently one screen, but structured so adding Signup /
- * ForgotPassword / OtpVerification later only touches this file and Route.Auth — the
- * root NavGraph and MainAppNavigation stay untouched.
- *
- * AuthViewModel itself stays owned by the root NavGraph rather than being obtained here,
- * since the root's sign-in/sign-out LaunchedEffect already needs authState to decide
- * when to swap between Route.Auth and Route.MainApp — state/actions are passed down
- * instead of re-resolving the ViewModel a second time.
- */
 @Composable
 fun AuthNavigation(
     state: AuthUiState,
     onAction: (AuthAction) -> Unit,
 ) {
-    val authBackStack = rememberNavBackStack(configuration = authSavedStateConfiguration, Route.Auth.SignIn)
+    val authBackStack = rememberNavBackStack(
+        configuration = authSavedStateConfiguration,
+        Route.Auth.SignIn
+    )
 
     NavDisplay(
         backStack = authBackStack,

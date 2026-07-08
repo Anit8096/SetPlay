@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,6 +88,7 @@ private enum class BottomNavBarTabs(
 @Composable
 fun MainAppNavigation() {
     var selectedTab by rememberSaveable { mutableStateOf(BottomNavBarTabs.HOME) }
+    var tabDirection by remember { mutableStateOf(1) }
 
     val homeBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Home)
     val browseBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Browse)
@@ -100,27 +102,46 @@ fun MainAppNavigation() {
         BottomNavBarTabs.PROFILE -> profileBackStack
     }
 
+    fun selectTab(tab: BottomNavBarTabs) {
+        if (tab != selectedTab) {
+            tabDirection = if (tab.ordinal > selectedTab.ordinal) 1 else -1
+            selectedTab = tab
+        }
+    }
+
+    fun push(route: Route) {
+        tabDirection = 1
+        activeBackStack.add(route)
+    }
+
+    fun pop() {
+        tabDirection = -1
+        activeBackStack.removeLastOrNull()
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        selectedTab.topBarTitle,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+            if (activeBackStack.size <= 1) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            selectedTab.topBarTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
                 )
-            )
+            }
         },
         bottomBar = {
             NavigationBar {
                 BottomNavBarTabs.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
+                        onClick = { selectTab(tab) },
                         icon = {
                             Icon(
                                 imageVector = if (selectedTab == tab) tab.selectedIcon
@@ -140,14 +161,24 @@ fun MainAppNavigation() {
                 rememberViewModelStoreNavEntryDecorator()
             ),
             backStack = activeBackStack,
-            onBack = { activeBackStack.removeLastOrNull() },
+            onBack = { pop() },
             transitionSpec = {
-                slideInHorizontally(initialOffsetX = { it })
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                if (tabDirection >= 0) {
+                    slideInHorizontally(initialOffsetX = { it })
+                        .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                } else {
+                    slideInHorizontally(initialOffsetX = { -it })
+                        .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                }
             },
             popTransitionSpec = {
-                slideInHorizontally(initialOffsetX = { -it })
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                if (tabDirection >= 0) {
+                    slideInHorizontally(initialOffsetX = { it })
+                        .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                } else {
+                    slideInHorizontally(initialOffsetX = { -it })
+                        .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                }
             },
             predictivePopTransitionSpec = {
                 slideInHorizontally(initialOffsetX = { -it })
@@ -156,10 +187,12 @@ fun MainAppNavigation() {
             entryProvider = entryProvider {
 
                 // Home Tab
-                entry<Route.MainApp.Tabs.Home> {
+                entry<Route.MainApp.Tabs.Home>(
+                    metadata = ListDetailSceneStrategy.listPane()
+                ) {
                     HomeScreen(
                         onFormatSelected = { format ->
-                            activeBackStack.add(Route.MainApp.CreateTournament(format))
+                            push(Route.MainApp.CreateTournament(format))
                         },
                         contentPadding = innerPadding
                     )
@@ -172,9 +205,9 @@ fun MainAppNavigation() {
                     BrowseScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            activeBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
+                            push(Route.MainApp.TournamentDetail(tournamentId))
                         },
-                        onJoinTournament = { activeBackStack.add(Route.MainApp.JoinTournament()) }
+                        onJoinTournament = { push(Route.MainApp.JoinTournament()) }
                     )
                 }
 
@@ -185,7 +218,7 @@ fun MainAppNavigation() {
                     HistoryScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            activeBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
+                            push(Route.MainApp.TournamentDetail(tournamentId))
                         }
                     )
                 }
@@ -206,11 +239,13 @@ fun MainAppNavigation() {
                     TournamentDetailScreen(
                         state = state,
                         onAction = vm::onAction,
-                        onBack = { activeBackStack.removeLastOrNull() }
+                        onBack = { pop() }
                     )
                 }
 
-                entry<Route.MainApp.CreateTournament> { route ->
+                entry<Route.MainApp.CreateTournament>(
+                    metadata = ListDetailSceneStrategy.detailPane()
+                ) { route ->
                     val vm: CreateTournamentViewModel = koinViewModel()
 
                     LaunchedEffect(route.format) {
@@ -222,14 +257,17 @@ fun MainAppNavigation() {
                         state = state,
                         onAction = vm::onAction,
                         onCreated = { tournament ->
+                            tabDirection = 1
                             activeBackStack.removeLastOrNull()
                             activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
                         },
-                        onBack = { activeBackStack.removeLastOrNull() }
+                        onBack = { pop() }
                     )
                 }
 
-                entry<Route.MainApp.JoinTournament> { route ->
+                entry<Route.MainApp.JoinTournament>(
+                    metadata = ListDetailSceneStrategy.detailPane()
+                ) { route ->
                     val vm: JoinTournamentViewModel = koinViewModel(
                         parameters = { parametersOf(route.inviteCode) }
                     )
@@ -238,10 +276,11 @@ fun MainAppNavigation() {
                         state = state,
                         onAction = vm::onAction,
                         onTournamentFound = { tournament ->
+                            tabDirection = 1
                             activeBackStack.removeLastOrNull()
                             activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
                         },
-                        onBack = { activeBackStack.removeLastOrNull() }
+                        onBack = { pop() }
                     )
                 }
             }

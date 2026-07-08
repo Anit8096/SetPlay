@@ -1,5 +1,9 @@
 package com.kmp.setplay.presentation.tournament.detail
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -200,11 +204,30 @@ fun TournamentDetailScreen(
                 }
             }
 
-            when (activeTab) {
-                DetailTab.BRACKET       -> BracketTab(state, onAction)
-                DetailTab.STANDINGS     -> StandingsTab(state, onAction)
-                DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
-                DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
+            // Same convention as MainAppNavigation's tabDirection: direction is derived
+            // from ordinal position (DetailTab.entries order == display order), not from
+            // AnimatedContent's own guess, so a tap on a tab to the right always slides
+            // in from the right and a tap on one to the left always slides in from the
+            // left — regardless of which tab you're coming from.
+            AnimatedContent(
+                targetState = activeTab,
+                transitionSpec = {
+                    if (targetState.ordinal >= initialState.ordinal) {
+                        slideInHorizontally(initialOffsetX = { it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                    } else {
+                        slideInHorizontally(initialOffsetX = { -it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                    }
+                },
+                label = "detailTabTransition"
+            ) { tab ->
+                when (tab) {
+                    DetailTab.BRACKET       -> BracketTab(state, onAction)
+                    DetailTab.STANDINGS     -> StandingsTab(state, onAction)
+                    DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
+                    DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
+                }
             }
         }
 
