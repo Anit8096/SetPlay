@@ -39,6 +39,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
+import com.kmp.setplay.presentation.auth.AuthAction
+import com.kmp.setplay.presentation.auth.AuthUiState
 import com.kmp.setplay.presentation.browse.BrowseScreen
 import com.kmp.setplay.presentation.history.HistoryScreen
 import com.kmp.setplay.presentation.home.HomeScreen
@@ -86,7 +88,10 @@ private enum class BottomNavBarTabs(
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
-fun MainAppNavigation() {
+fun MainAppNavigation(
+    authState: AuthUiState,
+    onAuthAction: (AuthAction) -> Unit
+) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomNavBarTabs.HOME) }
     var tabDirection by remember { mutableStateOf(1) }
 

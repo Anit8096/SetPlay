@@ -16,8 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.compose.koinInject
 import kotlin.coroutines.resume
+import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.js
-
 
 external interface GoogleCredentialResponse {
     val credential: String
@@ -34,7 +34,9 @@ external interface GoogleAccountsId {
     fun prompt()
 }
 
+@OptIn(ExperimentalWasmJsInterop::class)
 private fun newGoogleIdConfiguration(): GoogleIdConfiguration = js("({})")
+@OptIn(ExperimentalWasmJsInterop::class)
 private fun googleAccountsId(): GoogleAccountsId = js("window.google.accounts.id")
 
 

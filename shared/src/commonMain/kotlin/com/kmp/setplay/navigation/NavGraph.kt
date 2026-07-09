@@ -16,19 +16,14 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.kmp.setplay.presentation.auth.AuthViewModel
-import org.koin.compose.viewmodel.koinViewModel
+import org.koin.compose.koinInject
 
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NavGraph() {
-    val authViewModel: AuthViewModel = koinViewModel()
+    val authViewModel: AuthViewModel = koinInject()
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
-
-    val backStack = rememberNavBackStack(
-        configuration = routeSavedStateConfiguration,
-        if (authState.isAuthenticated) Route.MainApp else Route.Auth
-    )
 
     if (authState.isInitializing) {
         Surface(
@@ -39,6 +34,11 @@ fun NavGraph() {
         }
         return
     }
+
+    val backStack = rememberNavBackStack(
+        configuration = routeSavedStateConfiguration,
+        if (authState.isAuthenticated) Route.MainApp else Route.Auth
+    )
 
     LaunchedEffect(authState.isAuthenticated) {
         if (authState.isAuthenticated && backStack.lastOrNull() !is Route.MainApp) {
@@ -68,7 +68,10 @@ fun NavGraph() {
             }
 
             entry<Route.MainApp> {
-                MainAppNavigation()
+                MainAppNavigation(
+                    authState = authState,
+                    onAuthAction = authViewModel::onAction
+                )
             }
         }
     )

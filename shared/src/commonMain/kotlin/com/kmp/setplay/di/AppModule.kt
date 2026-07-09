@@ -24,8 +24,7 @@ val appModule = module {
         TournamentRepositoryImpl(supabase = get(), cache = get())
     }
 
-    // ── ViewModels ────────────────────────────────────────────────────────────
-    viewModel { AuthViewModel(get()) }
+    single { AuthViewModel(get()) }
     viewModel { BrowseViewModel(tournamentRepository = get(), authRepository = get()) }
     viewModel { CreateTournamentViewModel(get()) }
     viewModel { params ->
