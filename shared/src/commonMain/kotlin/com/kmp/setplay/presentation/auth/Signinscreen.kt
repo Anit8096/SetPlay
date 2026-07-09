@@ -121,8 +121,7 @@ fun LinkAccountBanner(
             )
             Text(
                 text = "Link a Google account to access your brackets from any device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Button(
                 onClick = onLinkGoogle,
