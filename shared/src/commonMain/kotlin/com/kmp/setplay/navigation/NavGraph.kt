@@ -25,10 +25,10 @@ import androidx.navigation3.ui.NavDisplay
 import com.kmp.setplay.presentation.auth.AuthViewModel
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
+import kotlin.time.Duration.Companion.milliseconds
 
-private const val MIN_SPLASH_DURATION_MS = 750L
+private const val MIN_SPLASH_DURATION_MS = 2000
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NavGraph() {
     val authViewModel: AuthViewModel = koinInject()
@@ -36,31 +36,17 @@ fun NavGraph() {
 
     var minSplashElapsed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(MIN_SPLASH_DURATION_MS)
+        delay(MIN_SPLASH_DURATION_MS.milliseconds)
         minSplashElapsed = true
     }
-
-    if (authState.isInitializing || !minSplashElapsed) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularWavyProgressIndicator(modifier = Modifier.size(48.dp))
-            }
-        }
-        return
-    }
-
+    val splashDone = !authState.isInitializing && minSplashElapsed
     val backStack = rememberNavBackStack(
         configuration = routeSavedStateConfiguration,
-        if (authState.isAuthenticated) Route.MainApp else Route.Auth
+        Route.PostSplash
     )
 
-    LaunchedEffect(authState.isAuthenticated) {
+    LaunchedEffect(splashDone, authState.isAuthenticated) {
+        if (!splashDone) return@LaunchedEffect
         if (authState.isAuthenticated && backStack.lastOrNull() !is Route.MainApp) {
             backStack.clear()
             backStack.add(Route.MainApp)
@@ -80,6 +66,10 @@ fun NavGraph() {
         onBack = { backStack.removeLastOrNull() },
         entryProvider = entryProvider {
 
+            entry<Route.PostSplash> {
+                AuthSplashScreen()
+            }
+
             entry<Route.Auth> {
                 AuthNavigation(
                     state = authState,
@@ -95,4 +85,20 @@ fun NavGraph() {
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun AuthSplashScreen() {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularWavyProgressIndicator(modifier = Modifier.size(48.dp))
+        }
+    }
 }

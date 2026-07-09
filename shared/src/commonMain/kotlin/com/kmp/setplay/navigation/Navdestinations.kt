@@ -13,6 +13,7 @@ import kotlinx.serialization.modules.polymorphic
 val routeSavedStateConfiguration = SavedStateConfiguration {
     serializersModule = SerializersModule {
         polymorphic(NavKey::class) {
+            subclass(Route.PostSplash::class, Route.PostSplash.serializer())
             subclass(Route.Auth::class, Route.Auth.serializer())
             subclass(Route.MainApp::class, Route.MainApp.serializer())
         }
@@ -21,6 +22,10 @@ val routeSavedStateConfiguration = SavedStateConfiguration {
 
 @Serializable
 sealed interface Route : NavKey {
+
+    // ── Splash ────────────────────────────────────────────────────────────────
+    @Serializable
+    data object PostSplash : Route
 
     // ── Auth graph ────────────────────────────────────────────────────────────
     @Serializable
