@@ -1,5 +1,8 @@
 package com.kmp.setplay.navigation
 
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -27,7 +30,7 @@ import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val MIN_SPLASH_DURATION_MS = 2000
+private const val MIN_SPLASH_DURATION_MS = 1500
 
 @Composable
 fun NavGraph() {
@@ -45,13 +48,20 @@ fun NavGraph() {
         Route.PostSplash
     )
 
+    // 1 = forward (splash -> auth/mainapp, auth -> mainapp), -1 = backward (logout: mainapp -> auth)
+    var direction by remember { mutableStateOf(1) }
+
     LaunchedEffect(splashDone, authState.isAuthenticated) {
         if (!splashDone) return@LaunchedEffect
         if (authState.isAuthenticated && backStack.lastOrNull() !is Route.MainApp) {
+            direction = 1
             backStack.clear()
             backStack.add(Route.MainApp)
         }
         if (!authState.isAuthenticated && backStack.lastOrNull() !is Route.Auth) {
+            // Only a genuine logout (MainApp -> Auth) reverses direction; landing on
+            // Auth straight from the splash on first launch is still forward.
+            direction = if (backStack.lastOrNull() is Route.MainApp) -1 else 1
             backStack.clear()
             backStack.add(Route.Auth)
         }
@@ -63,7 +73,29 @@ fun NavGraph() {
             rememberViewModelStoreNavEntryDecorator()
         ),
         backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
+        onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+        transitionSpec = {
+            if (direction >= 0) {
+                slideInHorizontally(initialOffsetX = { it })
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+            } else {
+                slideInHorizontally(initialOffsetX = { -it })
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+            }
+        },
+        popTransitionSpec = {
+            if (direction >= 0) {
+                slideInHorizontally(initialOffsetX = { it })
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+            } else {
+                slideInHorizontally(initialOffsetX = { -it })
+                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+            }
+        },
+        predictivePopTransitionSpec = {
+            slideInHorizontally(initialOffsetX = { -it })
+                .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+        },
         entryProvider = entryProvider {
 
             entry<Route.PostSplash> {
