@@ -8,6 +8,7 @@ import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.ParticipationSummary
 import com.kmp.setplay.domain.repository.TournamentRepository
+import com.kmp.setplay.presentation.common.SCREEN_ENTER_SETTLE_DELAY_MS
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,9 +18,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Duration.Companion.milliseconds
-
-const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
 enum class BrowseSubTab { DISCOVER, JOINED_LIVE, ORGANIZING_LIVE }
 
@@ -28,14 +26,11 @@ data class BrowseUiState(
     val tournaments: List<Tournament> = emptyList(),
     val formatFilter: BracketFormat? = null,
     val statusFilter: TournamentStatus? = null,
-    val isLoading: Boolean = false,
-    // True while re-fetching Discover in the background (pull-to-refresh) — unlike
-    // isLoading, the existing list stays on screen while this is true.
+    val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val error: String? = null,
     val organizingTournaments: List<Tournament> = emptyList(),
-    val isOrganizingLoading: Boolean = false,
-    // Join status + participant count per tournament id, for Discover cards
+    val isOrganizingLoading: Boolean = true,
     val participation: Map<String, ParticipationSummary> = emptyMap(),
     val joiningTournamentId: String? = null,
     val joinDialogFor: Tournament? = null,
@@ -67,7 +62,7 @@ class BrowseViewModel(
 
     init {
         viewModelScope.launch {
-            delay(SCREEN_ENTER_SETTLE_DELAY_MS.milliseconds)
+            delay(SCREEN_ENTER_SETTLE_DELAY_MS)
             loadDiscover()
             observeOrganizing()
         }

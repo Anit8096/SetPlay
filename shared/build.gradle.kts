@@ -70,6 +70,7 @@ kotlin {
             // Navigation3
             implementation(libs.jetbrains.navigation3.ui)
             implementation(libs.jetbrains.lifecycle.viewmodelNavigation3)
+            implementation(libs.compose.ui.backhandler)
 
             // Material3 Adaptive — window size classes + list-detail scene strategy for Nav3
             implementation(libs.jetbrains.material3.adaptive)

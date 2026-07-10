@@ -13,6 +13,7 @@ import com.kmp.setplay.domain.model.TournamentOrganizer
 import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
+import com.kmp.setplay.presentation.common.SCREEN_ENTER_SETTLE_DELAY_MS
 import kotlin.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +23,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
 // ── State ─────────────────────────────────────────────────────────────────────
 data class TournamentDetailUiState(

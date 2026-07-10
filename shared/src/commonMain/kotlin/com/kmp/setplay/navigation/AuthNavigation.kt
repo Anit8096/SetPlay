@@ -15,8 +15,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 
-// Local to this graph, same pattern as TabsNavigation/MainAppNavigation — only
-// Route.Auth's own children are registered here.
 @OptIn(ExperimentalSerializationApi::class)
 private val authSavedStateConfiguration = SavedStateConfiguration {
     serializersModule = SerializersModule {

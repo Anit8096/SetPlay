@@ -4,14 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.repository.TournamentRepository
+import com.kmp.setplay.presentation.common.SCREEN_ENTER_SETTLE_DELAY_MS
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
 data class JoinTournamentUiState(
     val codeInput: String = "",

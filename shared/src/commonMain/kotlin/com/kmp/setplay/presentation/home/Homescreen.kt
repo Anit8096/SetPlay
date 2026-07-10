@@ -31,11 +31,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
+import com.kmp.setplay.presentation.auth.LinkAccountBanner
 import com.kmp.setplay.presentation.common.ContentContainer
 
 @Composable
 fun HomeScreen(
     onFormatSelected: (BracketFormat) -> Unit,
+    isAnonymous: Boolean = false,
+    onLinkGoogle: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
     modifier: Modifier = Modifier
 ) {
@@ -49,6 +52,12 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            if (isAnonymous) {
+                item {
+                    LinkAccountBanner(onLinkGoogle = onLinkGoogle)
+                }
+            }
+
             item {
                 Text(
                     "Choose tournament type",
