@@ -4,11 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.repository.TournamentRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
 data class JoinTournamentUiState(
     val codeInput: String = "",
@@ -37,8 +40,15 @@ class JoinTournamentViewModel(
     val uiState: StateFlow<JoinTournamentUiState> = _uiState.asStateFlow()
 
     init {
-        // Auto-search if launched from a deep link with a code
-        if (!initialCode.isNullOrBlank()) search()
+        // Auto-search if launched from a deep link with a code. Delayed so the push
+        // transition into this screen settles before the network call starts; the
+        // manual Search action (onAction below) stays immediate since it's user-initiated.
+        if (!initialCode.isNullOrBlank()) {
+            viewModelScope.launch {
+                delay(SCREEN_ENTER_SETTLE_DELAY_MS)
+                search()
+            }
+        }
     }
 
     fun onAction(action: JoinTournamentAction) {

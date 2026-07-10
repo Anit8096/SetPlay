@@ -8,6 +8,7 @@ import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.ParticipationSummary
 import com.kmp.setplay.domain.repository.TournamentRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +17,9 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
+
+const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
 enum class BrowseSubTab { DISCOVER, JOINED_LIVE, ORGANIZING_LIVE }
 
@@ -62,8 +66,11 @@ class BrowseViewModel(
     val uiState: StateFlow<BrowseUiState> = _uiState.asStateFlow()
 
     init {
-        loadDiscover()
-        observeOrganizing()
+        viewModelScope.launch {
+            delay(SCREEN_ENTER_SETTLE_DELAY_MS.milliseconds)
+            loadDiscover()
+            observeOrganizing()
+        }
     }
 
     fun onAction(action: BrowseAction) {

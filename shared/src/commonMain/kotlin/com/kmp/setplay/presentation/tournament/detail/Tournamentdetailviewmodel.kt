@@ -14,6 +14,7 @@ import com.kmp.setplay.domain.model.TournamentStatus
 import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
 import kotlin.time.Instant
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,8 +23,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// ── State ─────────────────────────────────────────────────────────────────────
+const val SCREEN_ENTER_SETTLE_DELAY_MS = 300L
 
+// ── State ─────────────────────────────────────────────────────────────────────
 data class TournamentDetailUiState(
     val tournament: Tournament? = null,
     val teams: List<Team> = emptyList(),
@@ -129,9 +131,12 @@ class TournamentDetailViewModel(
     val uiState: StateFlow<TournamentDetailUiState> = _uiState.asStateFlow()
 
     init {
-        observeAll()
-        fetchOrganizerRole()
-        fetchOrganizers()
+        viewModelScope.launch {
+            delay(SCREEN_ENTER_SETTLE_DELAY_MS)
+            observeAll()
+            fetchOrganizerRole()
+            fetchOrganizers()
+        }
     }
 
     private fun fetchOrganizerRole() {

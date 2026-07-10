@@ -46,8 +46,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -60,6 +62,9 @@ class TournamentRepositoryImpl(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activeChannels = mutableSetOf<String>()
+
+    private suspend fun <T> io(block: suspend () -> T): Result<T> =
+        withContext(Dispatchers.Default) { runCatching { block() } }
 
     // ── Tournaments ───────────────────────────────────────────────────────────
 
@@ -82,7 +87,7 @@ class TournamentRepositoryImpl(
         // 4. Now observe Room — it has up-to-date data (or stale data if network failed)
         // Either way the UI gets something and Realtime keeps it current from here
         cache.observeMyTournaments(userId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
     override fun observeTournament(tournamentId: String): Flow<Tournament?> = flow {
         // 1. Fetch from Supabase first
@@ -102,9 +107,9 @@ class TournamentRepositoryImpl(
 
         // 4. Observe Room
         cache.observeTournament(tournamentId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
-    override suspend fun getPublicTournaments(): Result<List<Tournament>> = runCatching {
+    override suspend fun getPublicTournaments(): Result<List<Tournament>> = io {
         supabase.postgrest["tournaments"]
             .select { filter { eq("is_public", true) } }
             .decodeList<TournamentDto>()
@@ -125,7 +130,7 @@ class TournamentRepositoryImpl(
         scope.launch { subscribeToTournamentDetail(tournamentId) }
 
         cache.observeMatches(tournamentId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
     override fun observeTeams(tournamentId: String): Flow<List<Team>> = flow {
         val remote = runCatching {
@@ -138,7 +143,7 @@ class TournamentRepositoryImpl(
         if (remote != null) cache.saveTeams(remote)
 
         cache.observeTeams(tournamentId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
     override fun observeStandings(tournamentId: String): Flow<List<Standing>> = flow {
         val remote = runCatching {
@@ -151,7 +156,7 @@ class TournamentRepositoryImpl(
         if (remote != null) cache.saveStandings(remote)
 
         cache.observeStandings(tournamentId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
     override fun observeAnnouncements(tournamentId: String): Flow<List<Announcement>> = flow {
         val remote = runCatching {
@@ -164,7 +169,7 @@ class TournamentRepositoryImpl(
         if (remote != null) cache.saveAnnouncements(remote)
 
         cache.observeAnnouncements(tournamentId).collect { emit(it) }
-    }
+    }.flowOn(Dispatchers.Default)
 
     // ── Writes (already remote-first — Supabase confirmed before cache update) ─
 
@@ -173,7 +178,7 @@ class TournamentRepositoryImpl(
         format: BracketFormat,
         maxTeams: Int,
         isPublic: Boolean
-    ): Result<Tournament> = runCatching {
+    ): Result<Tournament> = io {
         val userId = supabase.auth.currentUserOrNull()?.id
             ?: error("Not authenticated")
 
@@ -195,7 +200,7 @@ class TournamentRepositoryImpl(
         domain
     }
 
-    override suspend fun updateTournament(tournament: Tournament): Result<Unit> = runCatching {
+    override suspend fun updateTournament(tournament: Tournament): Result<Unit> = io {
         supabase.postgrest["tournaments"]
             .update(
                 UpdateTournamentRequestDto(
@@ -209,7 +214,7 @@ class TournamentRepositoryImpl(
         cache.saveTournament(tournament)
     }
 
-    override suspend fun deleteTournament(tournamentId: String): Result<Unit> = runCatching {
+    override suspend fun deleteTournament(tournamentId: String): Result<Unit> = io {
         supabase.postgrest["tournaments"]
             .delete { filter { eq("id", tournamentId) } }
         cache.deleteTournament(tournamentId)
@@ -221,7 +226,7 @@ class TournamentRepositoryImpl(
         tournamentId: String,
         name: String,
         seed: Int?
-    ): Result<Team> = runCatching {
+    ): Result<Team> = io {
         val dto = supabase.postgrest["teams"]
             .insert(
                 InsertTeamRequestDto(
@@ -237,7 +242,7 @@ class TournamentRepositoryImpl(
         domain
     }
 
-    override suspend fun deleteTeam(teamId: String): Result<Unit> = runCatching {
+    override suspend fun deleteTeam(teamId: String): Result<Unit> = io {
         supabase.postgrest["teams"]
             .delete { filter { eq("id", teamId) } }
         // Without this the team lingers in Room/NoOp state until the next full remote
@@ -245,7 +250,7 @@ class TournamentRepositoryImpl(
         cache.deleteTeam(teamId)
     }
 
-    override suspend fun renameTeam(teamId: String, name: String): Result<Unit> = runCatching {
+    override suspend fun renameTeam(teamId: String, name: String): Result<Unit> = io {
         supabase.postgrest["teams"]
             .update(UpdateTeamRequestDto(name = name)) { filter { eq("id", teamId) } }
         val updated = supabase.postgrest["teams"]
@@ -262,7 +267,7 @@ class TournamentRepositoryImpl(
         tournamentId: String,
         userId: String,
         displayName: String
-    ): Result<Team> = runCatching {
+    ): Result<Team> = io {
         val tournament = supabase.postgrest["tournaments"]
             .select { filter { eq("id", tournamentId) } }
             .decodeSingle<TournamentDto>()
@@ -299,7 +304,7 @@ class TournamentRepositoryImpl(
     override suspend fun getParticipationSummary(
         tournamentId: String,
         userId: String?
-    ): Result<ParticipationSummary> = runCatching {
+    ): Result<ParticipationSummary> = io {
         val teams = supabase.postgrest["teams"]
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<TeamDto>()
@@ -314,7 +319,7 @@ class TournamentRepositoryImpl(
     // ── Join ──────────────────────────────────────────────────────────────────
 
     override suspend fun getTournamentByInviteCode(code: String): Result<Tournament> =
-        runCatching {
+        io {
             // Always check Supabase first for invite code lookups —
             // the tournament may have been created on another device
             val dto = supabase.postgrest["tournaments"]
@@ -331,7 +336,7 @@ class TournamentRepositoryImpl(
         tournamentId: String,
         seeding: SingleEliminationGenerator.Seeding,
         includeThirdPlace: Boolean
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = io {
         val teams = supabase.postgrest["teams"]
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<TeamDto>()
@@ -390,7 +395,7 @@ class TournamentRepositoryImpl(
         matchId: String,
         score1: Int,
         score2: Int
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = io {
         // Fetch from Supabase directly — don't trust cache for match state
         val match = supabase.postgrest["matches"]
             .select { filter { eq("id", matchId) } }
@@ -442,7 +447,7 @@ class TournamentRepositoryImpl(
             }
     }
 
-    override suspend fun setMatchSchedule(matchId: String, scheduledAt: Instant?): Result<Unit> = runCatching {
+    override suspend fun setMatchSchedule(matchId: String, scheduledAt: Instant?): Result<Unit> = io {
         supabase.postgrest["matches"]
             .update(UpdateMatchScheduleRequestDto(scheduledAt = scheduledAt)) {
                 filter { eq("id", matchId) }
@@ -459,7 +464,7 @@ class TournamentRepositoryImpl(
     override suspend fun getOrganizerRole(
         tournamentId: String,
         userId: String
-    ): Result<OrganizerRole?> = runCatching {
+    ): Result<OrganizerRole?> = io {
         val results = supabase.postgrest["tournament_organizers"]
             .select {
                 filter {
@@ -471,7 +476,7 @@ class TournamentRepositoryImpl(
         results.firstOrNull()?.role
     }
 
-    override suspend fun getOrganizers(tournamentId: String): Result<List<TournamentOrganizer>> = runCatching {
+    override suspend fun getOrganizers(tournamentId: String): Result<List<TournamentOrganizer>> = io {
         supabase.postgrest["tournament_organizers"]
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<TournamentOrganizerDto>()
@@ -480,7 +485,7 @@ class TournamentRepositoryImpl(
 
     // ── Share code access ────────────────────────────────────────────────────
 
-    override suspend fun recordShareView(tournamentId: String, userId: String): Result<Unit> = runCatching {
+    override suspend fun recordShareView(tournamentId: String, userId: String): Result<Unit> = io {
         supabase.postgrest["tournament_share_views"]
             .upsert(
                 RecordShareViewRequestDto(
@@ -491,7 +496,7 @@ class TournamentRepositoryImpl(
             ) { onConflict = "tournament_id,user_id" }
     }
 
-    override suspend fun isShareAccessRevoked(tournamentId: String, userId: String): Result<Boolean> = runCatching {
+    override suspend fun isShareAccessRevoked(tournamentId: String, userId: String): Result<Boolean> = io {
         supabase.postgrest["tournament_share_views"]
             .select {
                 filter {
@@ -503,7 +508,7 @@ class TournamentRepositoryImpl(
             .firstOrNull()?.revoked ?: false
     }
 
-    override suspend fun getShareViewers(tournamentId: String): Result<List<ShareViewer>> = runCatching {
+    override suspend fun getShareViewers(tournamentId: String): Result<List<ShareViewer>> = io {
         supabase.postgrest["tournament_share_views"]
             .select { filter { eq("tournament_id", tournamentId) } }
             .decodeList<ShareViewerDto>()
@@ -511,7 +516,7 @@ class TournamentRepositoryImpl(
             .sortedByDescending { it.lastViewedAt }
     }
 
-    override suspend fun revokeShareAccess(tournamentId: String, userId: String): Result<Unit> = runCatching {
+    override suspend fun revokeShareAccess(tournamentId: String, userId: String): Result<Unit> = io {
         supabase.postgrest["tournament_share_views"]
             .update(UpdateShareViewerRequestDto(revoked = true)) {
                 filter {
@@ -521,7 +526,7 @@ class TournamentRepositoryImpl(
             }
     }
 
-    override suspend fun restoreShareAccess(tournamentId: String, userId: String): Result<Unit> = runCatching {
+    override suspend fun restoreShareAccess(tournamentId: String, userId: String): Result<Unit> = io {
         supabase.postgrest["tournament_share_views"]
             .update(UpdateShareViewerRequestDto(revoked = false)) {
                 filter {

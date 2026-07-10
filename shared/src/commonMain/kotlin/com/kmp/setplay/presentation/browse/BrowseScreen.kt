@@ -73,8 +73,6 @@ fun BrowseScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // All errors surface as a snackbar. Cleared via ErrorShown right after so a
-    // recomposition (e.g. from an unrelated state change) doesn't re-show it.
     LaunchedEffect(uiState.error) {
         uiState.error?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -201,9 +199,6 @@ private fun DiscoverContent(
         ) {
             item {
                 FilterChip(
-                    // "All" means no filter at all — both format AND status must be clear,
-                    // not just status, otherwise this stayed selected while a format
-                    // filter was active.
                     selected = uiState.statusFilter == null && uiState.formatFilter == null,
                     onClick = onClearFilters,
                     label = { Text("All") }
