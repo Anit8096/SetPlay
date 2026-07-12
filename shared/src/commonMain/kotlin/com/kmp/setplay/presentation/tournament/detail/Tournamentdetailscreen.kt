@@ -31,7 +31,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.MoreVert
@@ -51,15 +50,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -99,12 +95,16 @@ private val MATCH_V_GAP        = 20.dp   // vertical gap between match blocks in
 // Solid near-black score chip so it reads consistently across light/dark themes
 private val SCORE_CHIP_DARK = Color(0xFF1E1E24)
 
+// Title and back/actions for this screen are rendered by MainAppNavigation's shared
+// Scaffold topBar (see TournamentDetailTopBarActions below) rather than by this
+// composable, which only renders body content.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TournamentDetailScreen(
     state: TournamentDetailUiState,
     onAction: (TournamentDetailAction) -> Unit,
     onBack: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -120,113 +120,79 @@ fun TournamentDetailScreen(
         if (state.tournamentDeleted) onBack()
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        state.tournament?.name ?: "Tournament",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (state.isOrganizer) {
-                        IconButton(onClick = { onAction(TournamentDetailAction.ShowShareCode) }) {
-                            Icon(Icons.Filled.Share, contentDescription = "Share code")
-                        }
-                        OrganizerOverflowMenu(
-                            isOwner = state.organizerRole != null,
-                            isPrivate = state.tournament?.isPublic == false,
-                            onRename = { onAction(TournamentDetailAction.ShowRenameDialog) },
-                            onShowAccessList = { onAction(TournamentDetailAction.ShowAccessList) },
-                            onEnd = { onAction(TournamentDetailAction.RequestEndTournament) },
-                            onDelete = { onAction(TournamentDetailAction.RequestDeleteTournament) }
+    Box(modifier = modifier.fillMaxSize()) {
+        when {
+            state.isLoading && state.tournament == null -> {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize().padding(contentPadding)
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            state.accessRevoked -> {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize().padding(contentPadding).padding(24.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Access revoked",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "The organizer has revoked your access to this tournament via share code.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        modifier = modifier
-    ) { innerPadding ->
-        if (state.isLoading && state.tournament == null) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize().padding(innerPadding)
-            ) {
-                CircularProgressIndicator()
-            }
-            return@Scaffold
-        }
-
-        if (state.accessRevoked) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "Access revoked",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "The organizer has revoked your access to this tournament via share code.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-            return@Scaffold
-        }
-
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            val tabs = state.availableTabs
-            val activeTab = if (state.selectedTab in tabs) state.selectedTab else tabs.first()
-
-            PrimaryTabRow(selectedTabIndex = tabs.indexOf(activeTab)) {
-                tabs.forEach { tab ->
-                    Tab(
-                        selected = activeTab == tab,
-                        onClick = { onAction(TournamentDetailAction.TabSelected(tab)) },
-                        text = { Text(tab.label()) }
-                    )
                 }
             }
 
-            // Same convention as MainAppNavigation's tabDirection: direction is derived
-            // from ordinal position (DetailTab.entries order == display order), not from
-            // AnimatedContent's own guess, so a tap on a tab to the right always slides
-            // in from the right and a tap on one to the left always slides in from the
-            // left — regardless of which tab you're coming from.
-            AnimatedContent(
-                targetState = activeTab,
-                transitionSpec = {
-                    if (targetState.ordinal >= initialState.ordinal) {
-                        slideInHorizontally(initialOffsetX = { it })
-                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
-                    } else {
-                        slideInHorizontally(initialOffsetX = { -it })
-                            .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+            else -> {
+                Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+                    val tabs = state.availableTabs
+                    val activeTab = if (state.selectedTab in tabs) state.selectedTab else tabs.first()
+
+                    PrimaryTabRow(selectedTabIndex = tabs.indexOf(activeTab)) {
+                        tabs.forEach { tab ->
+                            Tab(
+                                selected = activeTab == tab,
+                                onClick = { onAction(TournamentDetailAction.TabSelected(tab)) },
+                                text = { Text(tab.label()) }
+                            )
+                        }
                     }
-                },
-                label = "detailTabTransition"
-            ) { tab ->
-                when (tab) {
-                    DetailTab.BRACKET       -> BracketTab(state, onAction)
-                    DetailTab.STANDINGS     -> StandingsTab(state, onAction)
-                    DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
-                    DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
+
+                    // Same convention as MainAppNavigation's tabDirection: direction is derived
+                    // from ordinal position (DetailTab.entries order == display order), not from
+                    // AnimatedContent's own guess, so a tap on a tab to the right always slides
+                    // in from the right and a tap on one to the left always slides in from the
+                    // left — regardless of which tab you're coming from.
+                    AnimatedContent(
+                        targetState = activeTab,
+                        transitionSpec = {
+                            if (targetState.ordinal >= initialState.ordinal) {
+                                slideInHorizontally(initialOffsetX = { it })
+                                    .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                            } else {
+                                slideInHorizontally(initialOffsetX = { -it })
+                                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                            }
+                        },
+                        label = "detailTabTransition"
+                    ) { tab ->
+                        when (tab) {
+                            DetailTab.BRACKET       -> BracketTab(state, onAction)
+                            DetailTab.STANDINGS     -> StandingsTab(state, onAction)
+                            DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
+                            DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
+                        }
+                    }
                 }
             }
         }
@@ -450,6 +416,34 @@ fun TournamentDetailScreen(
                 }
             )
         }
+
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/**
+ * Top app bar actions (Share code / organizer overflow menu) for the tournament detail
+ * screen. Rendered by MainAppNavigation's shared Scaffold topBar `actions` slot rather
+ * than by [TournamentDetailScreen] itself, since titles and navigation/back handling for
+ * the whole main app are centralized there.
+ */
+@Composable
+fun TournamentDetailTopBarActions(
+    state: TournamentDetailUiState,
+    onAction: (TournamentDetailAction) -> Unit
+) {
+    if (state.isOrganizer) {
+        IconButton(onClick = { onAction(TournamentDetailAction.ShowShareCode) }) {
+            Icon(Icons.Filled.Share, contentDescription = "Share code")
+        }
+        OrganizerOverflowMenu(
+            isOwner = state.organizerRole != null,
+            isPrivate = state.tournament?.isPublic == false,
+            onRename = { onAction(TournamentDetailAction.ShowRenameDialog) },
+            onShowAccessList = { onAction(TournamentDetailAction.ShowAccessList) },
+            onEnd = { onAction(TournamentDetailAction.RequestEndTournament) },
+            onDelete = { onAction(TournamentDetailAction.RequestDeleteTournament) }
+        )
     }
 }
 

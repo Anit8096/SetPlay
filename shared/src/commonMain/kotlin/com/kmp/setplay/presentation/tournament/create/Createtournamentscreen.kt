@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
@@ -29,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -38,8 +36,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -53,6 +49,9 @@ import com.kmp.setplay.presentation.common.ContentContainer
 import com.kmp.setplay.presentation.common.DatePickerField
 import com.kmp.setplay.presentation.common.todayLocalDate
 
+// Title and back-button handling for this screen are rendered by MainAppNavigation's
+// shared Scaffold topBar (see createTournamentTopBarTitle/onCreateTournamentBack below)
+// rather than by this composable, which only renders body content.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTournamentScreen(
@@ -60,6 +59,7 @@ fun CreateTournamentScreen(
     onAction: (CreateTournamentAction) -> Unit,
     onCreated: (Tournament) -> Unit,
     onBack: () -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -75,37 +75,8 @@ fun CreateTournamentScreen(
         state.createdTournament?.let { onCreated(it) }
     }
 
-    val topBarTitle = when (state.step) {
-        CreateStep.PARTICIPANTS -> state.format.displayName() + " — Participants"
-        CreateStep.DETAILS      -> "Final Details"
-    }
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(topBarTitle, fontWeight = FontWeight.SemiBold)
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        if (state.step == CreateStep.PARTICIPANTS) onBack()
-                        else onAction(CreateTournamentAction.PreviousStep)
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        modifier = modifier
-    ) { innerPadding ->
-        ContentContainer(modifier = Modifier.padding(innerPadding).imePadding()) {
+    Box(modifier = modifier.fillMaxSize()) {
+        ContentContainer(modifier = Modifier.padding(contentPadding).imePadding()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 when (state.step) {
                     CreateStep.PARTICIPANTS -> ParticipantsStep(state, onAction)
@@ -116,7 +87,27 @@ fun CreateTournamentScreen(
                 }
             }
         }
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
+}
+
+/** Top app bar title for the create-tournament wizard, keyed off the current step. */
+fun createTournamentTopBarTitle(state: CreateTournamentUiState): String = when (state.step) {
+    CreateStep.PARTICIPANTS -> state.format.displayName() + " — Participants"
+    CreateStep.DETAILS      -> "Final Details"
+}
+
+/**
+ * Back-button behavior for the create-tournament wizard: the first step pops the nav
+ * back stack via [onBack], later steps step back within the wizard instead.
+ */
+fun onCreateTournamentBack(
+    state: CreateTournamentUiState,
+    onAction: (CreateTournamentAction) -> Unit,
+    onBack: () -> Unit
+) {
+    if (state.step == CreateStep.PARTICIPANTS) onBack()
+    else onAction(CreateTournamentAction.PreviousStep)
 }
 
 // ── Step 1: Participants ──────────────────────────────────────────────────────

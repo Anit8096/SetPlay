@@ -3,8 +3,10 @@ package com.kmp.setplay.navigation
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -14,6 +16,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,8 +26,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +56,10 @@ import com.kmp.setplay.presentation.home.HomeScreen
 import com.kmp.setplay.presentation.profile.ProfileScreen
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentScreen
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
+import com.kmp.setplay.presentation.tournament.create.createTournamentTopBarTitle
+import com.kmp.setplay.presentation.tournament.create.onCreateTournamentBack
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailScreen
+import com.kmp.setplay.presentation.tournament.detail.TournamentDetailTopBarActions
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailViewModel
 import com.kmp.setplay.presentation.tournament.join.JoinTournamentScreen
 import com.kmp.setplay.presentation.tournament.join.JoinTournamentViewModel
@@ -60,6 +68,19 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+
+/**
+ * Describes the shared TopAppBar that MainAppNavigation's Scaffold renders on behalf of
+ * whichever screen is currently on top of the active tab's back stack. Individual screens
+ * no longer own a Scaffold/TopAppBar/back button themselves — they publish this spec
+ * (via [SideEffect]) so title and back-navigation stay centralized in one place.
+ */
+private data class TopBarSpec(
+    val title: String,
+    val showBackButton: Boolean = true,
+    val onBackClick: () -> Unit,
+    val actions: @Composable RowScope.() -> Unit = {}
+)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val mainAppSavedStateConfiguration = SavedStateConfiguration {
@@ -98,6 +119,7 @@ fun MainAppNavigation(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomNavBarTabs.HOME) }
     var tabDirection by remember { mutableStateOf(1) }
+    var topBarSpec by remember { mutableStateOf<TopBarSpec?>(null) }
 
     val homeBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Home)
     val browseBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Browse)
@@ -128,6 +150,20 @@ fun MainAppNavigation(
         activeBackStack.removeLastOrNull()
     }
 
+    // Used by list screens (Browse/History) selecting a tournament: if a tournament
+    // detail is already on top of the back stack (e.g. in a list-detail multi-pane
+    // layout, or after tapping a different item), replace it in place instead of
+    // stacking a new detail entry on top of the previous one.
+    fun navigateToTournamentDetail(tournamentId: String) {
+        tabDirection = 1
+        val topRoute = activeBackStack.lastOrNull()
+        if (topRoute is Route.MainApp.TournamentDetail) {
+            activeBackStack[activeBackStack.lastIndex] = Route.MainApp.TournamentDetail(tournamentId)
+        } else {
+            activeBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
+        }
+    }
+
     fun handleBack() {
         when {
             activeBackStack.size > 1 -> pop()
@@ -141,6 +177,11 @@ fun MainAppNavigation(
 
     Scaffold(
         topBar = {
+            // Single source of truth for every screen's title + back button in the main
+            // app: the tab root shows the tab's own title with no back button, and every
+            // pushed screen (tournament detail, create wizard, join flow, etc.) publishes
+            // its title/back-behavior/actions into topBarSpec instead of drawing its own
+            // TopAppBar.
             if (activeBackStack.size <= 1) {
                 TopAppBar(
                     title = {
@@ -150,6 +191,24 @@ fun MainAppNavigation(
                             fontWeight = FontWeight.Bold
                         )
                     },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            } else {
+                val spec = topBarSpec
+                TopAppBar(
+                    title = {
+                        Text(spec?.title.orEmpty(), fontWeight = FontWeight.SemiBold)
+                    },
+                    navigationIcon = {
+                        if (spec?.showBackButton != false) {
+                            IconButton(onClick = { spec?.onBackClick?.invoke() ?: pop() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                    },
+                    actions = { spec?.actions?.invoke(this) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     )
@@ -175,6 +234,8 @@ fun MainAppNavigation(
             }
         }
     ) { innerPadding ->
+        val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
+
         NavDisplay(
             modifier = Modifier.fillMaxSize(),
             entryDecorators = listOf(
@@ -182,6 +243,7 @@ fun MainAppNavigation(
                 rememberViewModelStoreNavEntryDecorator()
             ),
             backStack = activeBackStack,
+            sceneStrategies = remember(listDetailStrategy) { listOf(listDetailStrategy) },
             onBack = { pop() },
             transitionSpec = {
                 if (tabDirection >= 0) {
@@ -228,7 +290,7 @@ fun MainAppNavigation(
                     BrowseScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            push(Route.MainApp.TournamentDetail(tournamentId))
+                            navigateToTournamentDetail(tournamentId)
                         },
                         onJoinTournament = { push(Route.MainApp.JoinTournament()) }
                     )
@@ -241,7 +303,7 @@ fun MainAppNavigation(
                     HistoryScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            push(Route.MainApp.TournamentDetail(tournamentId))
+                            navigateToTournamentDetail(tournamentId)
                         }
                     )
                 }
@@ -259,10 +321,20 @@ fun MainAppNavigation(
                         parameters = { parametersOf(route.tournamentId) }
                     )
                     val state by vm.uiState.collectAsStateWithLifecycle()
+
+                    SideEffect {
+                        topBarSpec = TopBarSpec(
+                            title = state.tournament?.name ?: "Tournament",
+                            onBackClick = { pop() },
+                            actions = { TournamentDetailTopBarActions(state, vm::onAction) }
+                        )
+                    }
+
                     TournamentDetailScreen(
                         state = state,
                         onAction = vm::onAction,
-                        onBack = { pop() }
+                        onBack = { pop() },
+                        contentPadding = innerPadding
                     )
                 }
 
@@ -276,6 +348,16 @@ fun MainAppNavigation(
                     }
 
                     val state by vm.uiState.collectAsStateWithLifecycle()
+
+                    SideEffect {
+                        topBarSpec = TopBarSpec(
+                            title = createTournamentTopBarTitle(state),
+                            onBackClick = {
+                                onCreateTournamentBack(state, vm::onAction) { pop() }
+                            }
+                        )
+                    }
+
                     CreateTournamentScreen(
                         state = state,
                         onAction = vm::onAction,
@@ -284,7 +366,8 @@ fun MainAppNavigation(
                             activeBackStack.removeLastOrNull()
                             activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
                         },
-                        onBack = { pop() }
+                        onBack = { pop() },
+                        contentPadding = innerPadding
                     )
                 }
 
@@ -295,6 +378,14 @@ fun MainAppNavigation(
                         parameters = { parametersOf(route.inviteCode) }
                     )
                     val state by vm.uiState.collectAsStateWithLifecycle()
+
+                    SideEffect {
+                        topBarSpec = TopBarSpec(
+                            title = "Join Tournament",
+                            onBackClick = { pop() }
+                        )
+                    }
+
                     JoinTournamentScreen(
                         state = state,
                         onAction = vm::onAction,
@@ -303,7 +394,8 @@ fun MainAppNavigation(
                             activeBackStack.removeLastOrNull()
                             activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
                         },
-                        onBack = { pop() }
+                        onBack = { pop() },
+                        contentPadding = innerPadding
                     )
                 }
             }
