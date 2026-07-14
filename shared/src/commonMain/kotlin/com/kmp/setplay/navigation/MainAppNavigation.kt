@@ -1,5 +1,7 @@
 package com.kmp.setplay.navigation
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -142,26 +144,17 @@ fun MainAppNavigation(
 
     fun push(route: Route) {
         tabDirection = 1
-        activeBackStack.add(route)
+        val topRoute = activeBackStack.lastOrNull()
+        if (topRoute?.let { it::class } == route::class) {
+            activeBackStack[activeBackStack.lastIndex] = route
+        } else {
+            activeBackStack.add(route)
+        }
     }
 
     fun pop() {
         tabDirection = -1
         activeBackStack.removeLastOrNull()
-    }
-
-    // Used by list screens (Browse/History) selecting a tournament: if a tournament
-    // detail is already on top of the back stack (e.g. in a list-detail multi-pane
-    // layout, or after tapping a different item), replace it in place instead of
-    // stacking a new detail entry on top of the previous one.
-    fun navigateToTournamentDetail(tournamentId: String) {
-        tabDirection = 1
-        val topRoute = activeBackStack.lastOrNull()
-        if (topRoute is Route.MainApp.TournamentDetail) {
-            activeBackStack[activeBackStack.lastIndex] = Route.MainApp.TournamentDetail(tournamentId)
-        } else {
-            activeBackStack.add(Route.MainApp.TournamentDetail(tournamentId))
-        }
     }
 
     fun handleBack() {
@@ -177,11 +170,6 @@ fun MainAppNavigation(
 
     Scaffold(
         topBar = {
-            // Single source of truth for every screen's title + back button in the main
-            // app: the tab root shows the tab's own title with no back button, and every
-            // pushed screen (tournament detail, create wizard, join flow, etc.) publishes
-            // its title/back-behavior/actions into topBarSpec instead of drawing its own
-            // TopAppBar.
             if (activeBackStack.size <= 1) {
                 TopAppBar(
                     title = {
@@ -290,7 +278,7 @@ fun MainAppNavigation(
                     BrowseScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            navigateToTournamentDetail(tournamentId)
+                            push(Route.MainApp.TournamentDetail(tournamentId))
                         },
                         onJoinTournament = { push(Route.MainApp.JoinTournament()) }
                     )
@@ -303,7 +291,7 @@ fun MainAppNavigation(
                     HistoryScreen(
                         contentPadding = innerPadding,
                         onTournamentSelected = { tournamentId ->
-                            navigateToTournamentDetail(tournamentId)
+                            push(Route.MainApp.TournamentDetail(tournamentId))
                         }
                     )
                 }
@@ -315,7 +303,11 @@ fun MainAppNavigation(
 
                 // Additional Routes accessible through Tab Screens
                 entry<Route.MainApp.TournamentDetail>(
-                    metadata = ListDetailSceneStrategy.detailPane()
+                    metadata = ListDetailSceneStrategy.detailPane() +
+                            ListDetailSceneStrategy.paneAnimation(
+                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            )
                 ) { route ->
                     val vm: TournamentDetailViewModel = koinViewModel(
                         parameters = { parametersOf(route.tournamentId) }
@@ -339,7 +331,11 @@ fun MainAppNavigation(
                 }
 
                 entry<Route.MainApp.CreateTournament>(
-                    metadata = ListDetailSceneStrategy.detailPane()
+                    metadata = ListDetailSceneStrategy.detailPane() +
+                            ListDetailSceneStrategy.paneAnimation(
+                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            )
                 ) { route ->
                     val vm: CreateTournamentViewModel = koinViewModel()
 
@@ -372,7 +368,11 @@ fun MainAppNavigation(
                 }
 
                 entry<Route.MainApp.JoinTournament>(
-                    metadata = ListDetailSceneStrategy.detailPane()
+                    metadata = ListDetailSceneStrategy.detailPane() +
+                            ListDetailSceneStrategy.paneAnimation(
+                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            )
                 ) { route ->
                     val vm: JoinTournamentViewModel = koinViewModel(
                         parameters = { parametersOf(route.inviteCode) }

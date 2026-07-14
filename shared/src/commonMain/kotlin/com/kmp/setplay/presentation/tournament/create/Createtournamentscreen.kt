@@ -77,13 +77,17 @@ fun CreateTournamentScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         ContentContainer(modifier = Modifier.padding(contentPadding).imePadding()) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (state.step) {
-                    CreateStep.PARTICIPANTS -> ParticipantsStep(state, onAction)
-                    CreateStep.DETAILS      -> DetailsStep(state, onAction)
+            LazyColumn (modifier = Modifier.fillMaxSize()) {
+                item {
+                    when (state.step) {
+                        CreateStep.PARTICIPANTS -> ParticipantsStep(state, onAction)
+                        CreateStep.DETAILS      -> DetailsStep(state, onAction)
+                    }
                 }
-                if (state.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                item {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
                 }
             }
         }
@@ -320,7 +324,7 @@ private fun ParticipantsStep(
             }
         }
 
-        // Make Public toggle (at the bottom)
+        // Make Public toggle
         item {
             SectionCard {
                 Row(
@@ -359,7 +363,7 @@ private fun ParticipantsStep(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Next: Final Details", style = MaterialTheme.typography.bodyLarge)
+                Text("Final Details", style = MaterialTheme.typography.bodyLarge)
             }
             Spacer(Modifier.height(8.dp))
         }
