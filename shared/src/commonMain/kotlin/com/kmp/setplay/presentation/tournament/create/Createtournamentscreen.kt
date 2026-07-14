@@ -93,7 +93,7 @@ fun CreateTournamentScreen(
 
 /** Top app bar title for the create-tournament wizard, keyed off the current step. */
 fun createTournamentTopBarTitle(state: CreateTournamentUiState): String = when (state.step) {
-    CreateStep.PARTICIPANTS -> state.format.displayName() + " — Participants"
+    CreateStep.PARTICIPANTS -> state.format.displayName()
     CreateStep.DETAILS      -> "Final Details"
 }
 

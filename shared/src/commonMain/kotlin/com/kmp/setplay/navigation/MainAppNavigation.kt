@@ -56,6 +56,7 @@ import com.kmp.setplay.presentation.browse.BrowseScreen
 import com.kmp.setplay.presentation.history.HistoryScreen
 import com.kmp.setplay.presentation.home.HomeScreen
 import com.kmp.setplay.presentation.profile.ProfileScreen
+import com.kmp.setplay.presentation.settings.SettingsScreen
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentScreen
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
 import com.kmp.setplay.presentation.tournament.create.createTournamentTopBarTitle
@@ -298,7 +299,22 @@ fun MainAppNavigation(
 
                 // Profile Tab
                 entry<Route.MainApp.Tabs.Profile> {
-                    ProfileScreen(contentPadding = innerPadding)
+                    ProfileScreen(
+                        onAuthAction = onAuthAction,
+                        onOpenSettings = { push(Route.MainApp.Settings) },
+                        contentPadding = innerPadding
+                    )
+                }
+
+                entry<Route.MainApp.Settings> {
+                    SideEffect {
+                        topBarSpec = TopBarSpec(
+                            title = "Settings",
+                            onBackClick = { pop() }
+                        )
+                    }
+
+                    SettingsScreen(contentPadding = innerPadding)
                 }
 
                 // Additional Routes accessible through Tab Screens
