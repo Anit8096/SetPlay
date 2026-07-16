@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
@@ -27,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.presentation.common.ContentContainer
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun JoinTournamentScreen(
     state: JoinTournamentUiState,
@@ -86,7 +90,10 @@ fun JoinTournamentScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (state.isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                            CircularWavyProgressIndicator(
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
                         }
                         Text("Find Tournament")
                     }

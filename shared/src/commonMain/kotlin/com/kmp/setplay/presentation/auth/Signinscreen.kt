@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -69,7 +69,7 @@ fun SignInScreen(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(40.dp))
 
                 // Android → native Credential Manager
                 // Web    → Google Identity Services (falls back to browser OAuth if it fails)
@@ -107,6 +107,9 @@ fun LinkAccountBanner(
     modifier: Modifier = Modifier
 ) {
     Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -117,13 +120,15 @@ fun LinkAccountBanner(
         ) {
             Text(
                 text = "Save your tournaments",
-                style = MaterialTheme.typography.titleSmall
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
             Text(
                 text = "Link a Google account to access your brackets from any device.",
-                style = MaterialTheme.typography.bodySmall,                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
-            Button(
+            TextButton(
                 onClick = onLinkGoogle,
                 modifier = Modifier.align(Alignment.End)
             ) {

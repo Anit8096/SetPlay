@@ -14,22 +14,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,7 +53,7 @@ import com.kmp.setplay.presentation.common.todayLocalDate
 // Title and back-button handling for this screen are rendered by MainAppNavigation's
 // shared Scaffold topBar (see createTournamentTopBarTitle/onCreateTournamentBack below)
 // rather than by this composable, which only renders body content.
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CreateTournamentScreen(
     state: CreateTournamentUiState,
@@ -83,7 +84,7 @@ fun CreateTournamentScreen(
                     CreateStep.DETAILS      -> DetailsStep(state, onAction)
                 }
                 if (state.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    LoadingIndicator(modifier = Modifier.align(Alignment.Center))
                 }
             }
         }
@@ -215,13 +216,22 @@ private fun ParticipantsStep(
                 }
             }
 
-            // Participant list
+            // Participant list — a single Material3 segmented list group (2dp gaps),
+            // kept as one LazyColumn item so the wizard's 24dp section spacing doesn't
+            // leak in between segments. Roster sizes here are small (≤32), so losing
+            // per-row lazy recycling costs nothing.
             if (state.participants.isNotEmpty()) {
-                itemsIndexed(state.participants, key = { _, p -> p.id }) { _, participant ->
-                    ParticipantRow(
-                        participant = participant,
-                        onRemove = { onAction(CreateTournamentAction.RemoveParticipant(participant.id)) }
-                    )
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        state.participants.forEachIndexed { index, participant ->
+                            ParticipantRow(
+                                participant = participant,
+                                index = index,
+                                count = state.participants.size,
+                                onRemove = { onAction(CreateTournamentAction.RemoveParticipant(participant.id)) }
+                            )
+                        }
+                    }
                 }
             }
         } else {
@@ -485,46 +495,49 @@ private fun DetailsStep(
 
 // ── Shared sub-composables ────────────────────────────────────────────────────
 
+/**
+ * One roster entry. Display row with a trailing remove button — the multiplatform
+ * material3 build doesn't ship the non-interactive SegmentedListItem overload yet
+ * (androidx added it in 1.5.0-alpha23), so this uses the onClick overload with an
+ * inert lambda.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ParticipantRow(
     participant: ParticipantEntry,
+    index: Int,
+    count: Int,
     onRemove: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
+    SegmentedListItem(
+        onClick = {},
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        leadingContent = {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    "#${participant.seed}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        },
+        trailingContent = {
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     ) {
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-        ) {
-            Text(
-                "#${participant.seed}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            participant.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-        IconButton(onClick = onRemove) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Remove",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        Text(participant.displayName, style = MaterialTheme.typography.bodyMedium)
     }
-    HorizontalDivider(
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 40.dp)
-    )
 }
 
 @Composable

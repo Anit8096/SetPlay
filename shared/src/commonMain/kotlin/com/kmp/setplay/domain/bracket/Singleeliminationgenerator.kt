@@ -52,11 +52,18 @@ object SingleEliminationGenerator {
             name = getRoundName(1, totalRounds)
         ))
 
-        // Build first round matches — pair teams[0] vs teams[n-1], etc.
+        // Build first round matches using canonical bracket placement. Pairing
+        // adjacent canonical positions gives 1v16, 8v9, 4v13, 5v12, ... so seeds 1
+        // and 2 sit in opposite halves and BYEs (the padded nulls at the tail of
+        // sortedTeams) spread across the bracket instead of stacking at the top —
+        // the old (i, n-1-i) pairing made seeds 1 and 2 collide in round 2.
+        val positions = bracketPositions(bracketSize)
         val round1Matches = mutableListOf<Match>()
         for (i in 0 until bracketSize / 2) {
-            val team1 = sortedTeams.getOrNull(i)
-            val team2 = sortedTeams.getOrNull(bracketSize - 1 - i)
+            // positions[] holds the better seed of each pair first, so team1 is
+            // never null — BYEs (seeds beyond the real team count) land in team2.
+            val team1 = sortedTeams.getOrNull(positions[2 * i] - 1)
+            val team2 = sortedTeams.getOrNull(positions[2 * i + 1] - 1)
             val isBye = team2 == null
 
             round1Matches.add(
@@ -136,6 +143,17 @@ object SingleEliminationGenerator {
             previousRoundMatches = roundMatches
         }
 
+        // ── Auto-advance round-1 BYE winners ──────────────────────────────────
+        // A BYE match is decided at generation time, so its winner must be slotted
+        // into the next round here — advanceWinner only runs on score submission,
+        // and nothing ever "completes" a BYE, so without this pass every
+        // bye-winner's round-2 slot stayed TBD forever.
+        for (bye in matches.filter { it.status == MatchStatus.BYE && it.winnerId != null }) {
+            val nextIdx = matches.indexOfFirst { it.id == bye.nextMatchId }
+            if (nextIdx == -1) continue
+            matches[nextIdx] = placeInto(matches[nextIdx], bye.winnerId!!, bye.matchNumber)
+        }
+
         // ── 3rd place match ──────────────────────────────────────────────────
         // Only meaningful when there were semi-finals (bracket size >= 4)
         if (includeThirdPlace && semiFinalMatches.size == 2) {
@@ -143,7 +161,13 @@ object SingleEliminationGenerator {
             rounds.add(Round(
                 id = thirdPlaceRoundId,
                 tournamentId = tournamentId,
-                roundNumber = totalRounds, // sits alongside the Final
+                // totalRounds + 1, NOT totalRounds: rounds has a unique constraint on
+                // (tournament_id, round_number), and the Final already owns totalRounds —
+                // reusing it made every 3rd-place bracket insert fail with Postgres 23505.
+                // Nothing reads roundNumber for bracket layout (that groups by roundId);
+                // the only consumer is the Room DAO's ORDER BY, where sorting after the
+                // Final is chronologically correct anyway.
+                roundNumber = totalRounds + 1,
                 name = "3rd Place"
             ))
             val thirdPlaceMatch = Match(
@@ -189,11 +213,7 @@ object SingleEliminationGenerator {
         if (winnerId != null) {
             val nextMatch = allMatches.firstOrNull { it.id == completedMatch.nextMatchId }
             if (nextMatch != null) {
-                updates += if (nextMatch.team1Id == null) {
-                    nextMatch.copy(team1Id = winnerId)
-                } else {
-                    nextMatch.copy(team2Id = winnerId)
-                }
+                updates += placeInto(nextMatch, winnerId, completedMatch.matchNumber)
             }
         }
 
@@ -201,11 +221,7 @@ object SingleEliminationGenerator {
         if (loserId != null) {
             val loserMatch = allMatches.firstOrNull { it.id == completedMatch.nextLoserMatchId }
             if (loserMatch != null) {
-                updates += if (loserMatch.team1Id == null) {
-                    loserMatch.copy(team1Id = loserId)
-                } else {
-                    loserMatch.copy(team2Id = loserId)
-                }
+                updates += placeInto(loserMatch, loserId, completedMatch.matchNumber)
             }
         }
 
@@ -213,6 +229,38 @@ object SingleEliminationGenerator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Slots [teamId] into [target]: an odd feeder matchNumber feeds the top slot
+     * (team1), an even one the bottom (team2) — matching how feeders are laid out
+     * visually — with first-free-slot as the fallback so a legitimately filled
+     * slot (e.g. a pre-advanced BYE winner) is never overwritten.
+     */
+    private fun placeInto(target: Match, teamId: String, feederMatchNumber: Int): Match {
+        val preferTop = feederMatchNumber % 2 == 1
+        return when {
+            preferTop && target.team1Id == null -> target.copy(team1Id = teamId)
+            !preferTop && target.team2Id == null -> target.copy(team2Id = teamId)
+            target.team1Id == null -> target.copy(team1Id = teamId)
+            else -> target.copy(team2Id = teamId)
+        }
+    }
+
+    /**
+     * Canonical single-elimination position order via the standard doubling
+     * expansion: [1,2] -> [1,4,2,3] -> [1,8,4,5,2,7,3,6] -> ... Each element x of
+     * a size-k list expands to [x, 2k+1-x]. Pairing adjacent entries of the final
+     * list yields the classic bracket (for 16: 1v16, 8v9, 4v13, 5v12, 2v15, 7v10,
+     * 3v14, 6v11).
+     */
+    private fun bracketPositions(bracketSize: Int): List<Int> {
+        var positions = listOf(1, 2)
+        while (positions.size < bracketSize) {
+            val n = positions.size * 2
+            positions = positions.flatMap { listOf(it, n + 1 - it) }
+        }
+        return positions
+    }
 
     private fun orderTeams(teams: List<Team>, bracketSize: Int, seeding: Seeding): List<Team?> {
         val ordered = when (seeding) {

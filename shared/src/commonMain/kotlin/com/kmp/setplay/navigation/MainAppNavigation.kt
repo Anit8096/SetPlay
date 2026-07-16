@@ -5,7 +5,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -72,12 +75,6 @@ import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-/**
- * Describes the shared TopAppBar that MainAppNavigation's Scaffold renders on behalf of
- * whichever screen is currently on top of the active tab's back stack. Individual screens
- * no longer own a Scaffold/TopAppBar/back button themselves — they publish this spec
- * (via [SideEffect]) so title and back-navigation stay centralized in one place.
- */
 private data class TopBarSpec(
     val title: String,
     val showBackButton: Boolean = true,
@@ -181,7 +178,7 @@ fun MainAppNavigation(
                         )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     )
                 )
             } else {
@@ -199,7 +196,7 @@ fun MainAppNavigation(
                     },
                     actions = { spec?.actions?.invoke(this) },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     )
                 )
             }
@@ -226,7 +223,7 @@ fun MainAppNavigation(
         val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
 
         NavDisplay(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().consumeWindowInsets(innerPadding),
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),
                 rememberViewModelStoreNavEntryDecorator()
@@ -274,7 +271,20 @@ fun MainAppNavigation(
 
                 // Browse tab
                 entry<Route.MainApp.Tabs.Browse>(
-                    metadata = ListDetailSceneStrategy.listPane()
+                    metadata = ListDetailSceneStrategy.listPane(
+                        detailPlaceholder = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    "Select a tournament to see its details",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    )
                 ) {
                     BrowseScreen(
                         contentPadding = innerPadding,

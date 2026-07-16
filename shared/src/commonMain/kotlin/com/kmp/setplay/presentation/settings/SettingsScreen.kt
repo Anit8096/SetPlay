@@ -3,25 +3,22 @@ package com.kmp.setplay.presentation.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -57,16 +54,23 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SettingsRow(
-                icon = Icons.Filled.DarkMode,
-                title = "Appearance",
-                subtitle = "Light / Dark / System — coming soon"
-            )
-            SettingsRow(
-                icon = Icons.Filled.Notifications,
-                title = "Notifications",
-                subtitle = "Match reminders and announcements — coming soon"
-            )
+            // Material3 segmented list group — 2dp gaps between segments.
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SettingsRow(
+                    icon = Icons.Filled.DarkMode,
+                    title = "Appearance",
+                    subtitle = "Light / Dark / System — coming soon",
+                    index = 0,
+                    count = 2
+                )
+                SettingsRow(
+                    icon = Icons.Filled.Notifications,
+                    title = "Notifications",
+                    subtitle = "Match reminders and announcements — coming soon",
+                    index = 1,
+                    count = 2
+                )
+            }
 
             Spacer(Modifier.size(8.dp))
 
@@ -79,43 +83,33 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Both rows are Step 15 placeholders, so they render through the disabled state of
+ * [SegmentedListItem] (enabled = false handles the greyed-out content automatically).
+ * When theme/notification prefs land, flip enabled and wire onClick.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SettingsRow(
     icon: ImageVector,
     title: String,
-    subtitle: String
+    subtitle: String,
+    index: Int,
+    count: Int
 ) {
-    val disabled = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(16.dp)
-        ) {
+    SegmentedListItem(
+        onClick = {},
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        enabled = false,
+        leadingContent = {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = disabled,
                 modifier = Modifier.size(22.dp)
             )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = disabled
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = disabled
-                )
-            }
-        }
+        },
+        supportingContent = { Text(subtitle) }
+    ) {
+        Text(title, fontWeight = FontWeight.Medium)
     }
 }

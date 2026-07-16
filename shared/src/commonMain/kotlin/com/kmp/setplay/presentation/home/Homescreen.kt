@@ -1,18 +1,13 @@
 package com.kmp.setplay.presentation.home
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountTree
@@ -21,12 +16,13 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,6 +30,7 @@ import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.presentation.auth.LinkAccountBanner
 import com.kmp.setplay.presentation.common.ContentContainer
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     onFormatSelected: (BracketFormat) -> Unit,
@@ -61,81 +58,56 @@ fun HomeScreen(
             item {
                 Text(
                     "Choose tournament type",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.size(4.dp))
+                Text(
+                    "Pick a format to start a new tournament",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(
-                    modifier = Modifier.size(4.dp)
-                )
+                Spacer(modifier = Modifier.size(12.dp))
             }
 
-            BracketFormat.entries.forEach { format ->
-                item(key = format.name) {
-                    FormatCard(
-                        format = format,
-                        enabled = format == BracketFormat.SINGLE_ELIMINATION,
-                        onClick = { if (format == BracketFormat.SINGLE_ELIMINATION) onFormatSelected(format) }
-                    )
+
+            item {
+                val formats = BracketFormat.entries
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    formats.forEachIndexed { index, format ->
+                        val enabled = format == BracketFormat.SINGLE_ELIMINATION
+                        SegmentedListItem(
+                            onClick = { onFormatSelected(format) },
+                            shapes = ListItemDefaults.segmentedShapes(index = index, count = formats.size),
+                            enabled = enabled,
+                            colors = ListItemDefaults.segmentedColors(
+                                leadingContentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            leadingContent = {
+                                Icon(
+                                    imageVector = format.icon(),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            supportingContent = {
+                                Text(if (enabled) format.description() else "Coming soon")
+                            },
+                            trailingContent = if (enabled) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            } else null
+                        ) {
+                            Text(format.displayName(), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FormatCard(
-    format: BracketFormat,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            if (enabled) MaterialTheme.colorScheme.outlineVariant
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-        ) {
-            Icon(
-                imageVector = format.icon(),
-                contentDescription = null,
-                tint = if (enabled) MaterialTheme.colorScheme.primary
-                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    format.displayName(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                )
-                Text(
-                    if (enabled) format.description() else "Coming soon",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                        alpha = if (enabled) 1f else 0.4f
-                    )
-                )
-            }
-            if (enabled) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
             }
         }
     }

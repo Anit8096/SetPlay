@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,8 +39,11 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +54,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -92,13 +99,11 @@ private val BLOCK_CAPTION_HEIGHT = 18.dp // "Set date & time" caption below the 
 private val ROUND_GAP          = 40.dp   // horizontal gap between rounds
 private val MATCH_V_GAP        = 20.dp   // vertical gap between match blocks in same round
 
-// Solid near-black score chip so it reads consistently across light/dark themes
-private val SCORE_CHIP_DARK = Color(0xFF1E1E24)
 
 // Title and back/actions for this screen are rendered by MainAppNavigation's shared
 // Scaffold topBar (see TournamentDetailTopBarActions below) rather than by this
 // composable, which only renders body content.
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TournamentDetailScreen(
     state: TournamentDetailUiState,
@@ -127,7 +132,7 @@ fun TournamentDetailScreen(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize().padding(contentPadding)
                 ) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             }
 
@@ -154,17 +159,30 @@ fun TournamentDetailScreen(
             }
 
             else -> {
-                Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(contentPadding),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     val tabs = state.availableTabs
                     val activeTab = if (state.selectedTab in tabs) state.selectedTab else tabs.first()
 
-                    PrimaryTabRow(selectedTabIndex = tabs.indexOf(activeTab)) {
-                        tabs.forEach { tab ->
-                            Tab(
+                    SingleChoiceSegmentedButtonRow(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        tabs.forEachIndexed { index, tab ->
+                            SegmentedButton(
                                 selected = activeTab == tab,
                                 onClick = { onAction(TournamentDetailAction.TabSelected(tab)) },
-                                text = { Text(tab.label()) }
-                            )
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = tabs.size
+                                ),
+                                icon = {}
+                            ) {
+                                Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
 
@@ -184,7 +202,7 @@ fun TournamentDetailScreen(
                         when (tab) {
                             DetailTab.BRACKET       -> BracketTab(state, onAction)
                             DetailTab.STANDINGS     -> StandingsTab(state, onAction)
-                            DetailTab.ANNOUNCEMENTS -> AnnouncementsTab(state)
+                            DetailTab.NOTICE        -> NoticeTab(state)
                             DetailTab.PARTICIPANTS  -> ParticipantsTab(state)
                         }
                     }
@@ -353,7 +371,7 @@ fun TournamentDetailScreen(
                         state.isLoadingViewers -> Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp)
-                        ) { CircularProgressIndicator() }
+                        ) { LoadingIndicator() }
 
                         state.viewers.isEmpty() -> Text(
                             "No one has viewed this tournament via share code yet.",
@@ -363,12 +381,15 @@ fun TournamentDetailScreen(
                         )
 
                         else -> Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            // 2dp is the segmented-list gap between rows.
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                             modifier = Modifier.padding(bottom = 24.dp)
                         ) {
-                            state.viewers.forEach { viewer ->
+                            state.viewers.forEachIndexed { index, viewer ->
                                 AccessListRow(
                                     viewer = viewer,
+                                    index = index,
+                                    count = state.viewers.size,
                                     onToggle = { onAction(TournamentDetailAction.ToggleViewerAccess(viewer)) }
                                 )
                             }
@@ -449,15 +470,9 @@ private fun BracketTab(
     state: TournamentDetailUiState,
     onAction: (TournamentDetailAction) -> Unit
 ) {
-    val matchesByRound = state.matches
-        .groupBy { it.roundId }
-        .entries
-        .sortedBy { entry ->
-            // Sort rounds by the minimum match number to preserve bracket order
-            entry.value.minOf { it.matchNumber }
-        }
+    val allByRound = state.matches.groupBy { it.roundId }
 
-    if (matchesByRound.isEmpty()) {
+    if (allByRound.isEmpty()) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 "No bracket yet",
@@ -468,10 +483,38 @@ private fun BracketTab(
         return
     }
 
-    val connectorColor = MaterialTheme.colorScheme.outlineVariant
-    val totalRounds    = matchesByRound.size
+    // The 3rd-place round is identified structurally: its single match is the
+    // target of a semi-final's nextLoserMatchId. It is NOT a bracket column —
+    // treating it as one rendered a phantom second "Final" with garbage
+    // connectors. It's drawn separately after the real Final instead.
+    val loserTargets = state.matches.mapNotNull { it.nextLoserMatchId }.toSet()
+    val thirdPlaceRoundIds = allByRound
+        .filterValues { ms -> ms.size == 1 && ms.first().id in loserTargets }
+        .keys
+    val thirdPlaceMatch = thirdPlaceRoundIds.firstOrNull()
+        ?.let { allByRound.getValue(it).first() }
 
-    // Horizontal + vertical scroll for large brackets
+    // Main rounds ordered first-round -> final by descending match count
+    // (16, 8, 4, 2, 1) — reliable for single elimination and independent of DB
+    // row order. The old sort keyed on minOf { matchNumber }, which is 1 for
+    // EVERY round, so column order was whatever the database returned.
+    val mainRounds = allByRound
+        .filterKeys { it !in thirdPlaceRoundIds }
+        .entries
+        .sortedByDescending { it.value.size }
+        .map { entry -> entry.value.sortedBy { it.matchNumber } }
+
+    val connectorColor = MaterialTheme.colorScheme.outlineVariant
+
+    // Every match block lives in a slot of height (unit * 2^roundIndex), centered.
+    // All columns then have the same total height, and match j of round r+1 sits
+    // exactly at the vertical midpoint of its two feeders — the connector math
+    // below relies on this invariant instead of trying to compensate for labels
+    // and captions the way the old Canvas did.
+    val unit = BLOCK_LABEL_HEIGHT + 6.dp + MATCH_CARD_HEIGHT + 4.dp + BLOCK_CAPTION_HEIGHT + MATCH_V_GAP
+    val firstRoundCount = mainRounds.first().size
+    val totalHeight = unit * firstRoundCount
+
     val hScroll = rememberScrollState()
     val vScroll = rememberScrollState()
 
@@ -481,71 +524,104 @@ private fun BracketTab(
             .horizontalScroll(hScroll)
             .verticalScroll(vScroll)
     ) {
-        // Rounds laid out as a Row; connectors are drawn between them via Canvas
         Row(
-            horizontalArrangement = Arrangement.spacedBy(ROUND_GAP),
-            verticalAlignment    = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             modifier = Modifier.padding(24.dp)
         ) {
-            matchesByRound.forEachIndexed { roundIndex, (_, roundMatches) ->
-                val sortedMatches   = roundMatches.sortedBy { it.matchNumber }
-                val isLastRound     = roundIndex == totalRounds - 1
-                val roundShort      = roundShortLabel(sortedMatches.size)
-                val isFinalRound    = sortedMatches.size == 1
+            mainRounds.forEachIndexed { roundIndex, roundMatches ->
+                val slotHeight = unit * (1 shl roundIndex)
+                val isFinalRound = roundIndex == mainRounds.lastIndex && roundMatches.size == 1
+                val roundShort = roundShortLabel(roundMatches.size)
 
-                // Round column — each match is its own label + card + caption block
-                Column(verticalArrangement = Arrangement.spacedBy(MATCH_V_GAP)) {
-                    sortedMatches.forEachIndexed { matchIndex, match ->
-                        val team1 = state.teams.find { it.id == match.team1Id }
-                        val team2 = state.teams.find { it.id == match.team2Id }
-                        val clickable = match.status == MatchStatus.SCHEDULED &&
-                                match.team1Id != null && match.team2Id != null &&
-                                state.isOrganizer
-
-                        Column(horizontalAlignment = Alignment.Start) {
-                            MatchLabel(
-                                text = matchLabel(roundShort, isFinalRound, matchIndex),
-                                isFinal = isFinalRound
+                Column {
+                    roundMatches.forEachIndexed { matchIndex, match ->
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.height(slotHeight)
+                        ) {
+                            MatchBlock(
+                                match = match,
+                                label = matchLabel(roundShort, isFinalRound, matchIndex),
+                                isFinal = isFinalRound,
+                                state = state,
+                                onAction = onAction
                             )
-                            Spacer(Modifier.height(6.dp))
-                            BracketMatchCard(
-                                match    = match,
-                                team1    = team1,
-                                team2    = team2,
-                                onClick  = if (clickable) {
-                                    { onAction(TournamentDetailAction.MatchClicked(match)) }
-                                } else null,
-                                onNameClick = if (state.isOrganizer) { team ->
-                                    onAction(TournamentDetailAction.ShowRenameTeamDialog(team))
-                                } else null
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            TextButton(
-                                onClick = { onAction(TournamentDetailAction.ShowScheduleDialog(match)) },
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                                modifier = Modifier.height(BLOCK_CAPTION_HEIGHT)
-                            ) {
-                                Text(
-                                    match.scheduledAt?.let {
-                                        formatMatchSchedule(it)
-                                    } ?: "Set date & time",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
                         }
                     }
                 }
 
-                // Draw horizontal connector lines between this round and the next
-                if (!isLastRound) {
-                    val nextRoundMatchCount = matchesByRound.getOrNull(roundIndex + 1)?.value?.size ?: 0
+                if (roundIndex != mainRounds.lastIndex) {
                     BracketConnector(
-                        fromMatchCount = sortedMatches.size,
-                        toMatchCount   = nextRoundMatchCount,
-                        color          = connectorColor
+                        pairCount = mainRounds[roundIndex + 1].size,
+                        fromSlotHeight = slotHeight,
+                        totalHeight = totalHeight,
+                        color = connectorColor
                     )
                 }
             }
+
+            // 3rd place — standalone, no connectors: it's fed by the semi-final
+            // LOSERS, which the winner-path connector lines don't represent.
+            thirdPlaceMatch?.let { match ->
+                Spacer(Modifier.width(ROUND_GAP))
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.height(totalHeight)
+                ) {
+                    MatchBlock(
+                        match = match,
+                        label = "3rd Place",
+                        isFinal = false,
+                        state = state,
+                        onAction = onAction
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One match "block": label above, card, tappable schedule caption below. */
+@Composable
+private fun MatchBlock(
+    match: Match,
+    label: String,
+    isFinal: Boolean,
+    state: TournamentDetailUiState,
+    onAction: (TournamentDetailAction) -> Unit
+) {
+    val team1 = state.teams.find { it.id == match.team1Id }
+    val team2 = state.teams.find { it.id == match.team2Id }
+    val clickable = match.status == MatchStatus.SCHEDULED &&
+            match.team1Id != null && match.team2Id != null &&
+            state.isOrganizer
+
+    Column(horizontalAlignment = Alignment.Start) {
+        MatchLabel(text = label, isFinal = isFinal)
+        Spacer(Modifier.height(6.dp))
+        BracketMatchCard(
+            match    = match,
+            team1    = team1,
+            team2    = team2,
+            onClick  = if (clickable) {
+                { onAction(TournamentDetailAction.MatchClicked(match)) }
+            } else null,
+            onNameClick = if (state.isOrganizer) { team ->
+                onAction(TournamentDetailAction.ShowRenameTeamDialog(team))
+            } else null
+        )
+        Spacer(Modifier.height(4.dp))
+        TextButton(
+            onClick = { onAction(TournamentDetailAction.ShowScheduleDialog(match)) },
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+            modifier = Modifier.height(BLOCK_CAPTION_HEIGHT)
+        ) {
+            Text(
+                match.scheduledAt?.let {
+                    formatMatchSchedule(it)
+                } ?: "Set date & time",
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
@@ -572,77 +648,36 @@ private fun MatchLabel(text: String, isFinal: Boolean) {
 }
 
 /**
- * Draws the bracket connector lines between two rounds.
- * Each pair of matches feeds into one match in the next round.
+ * Connector lines between one round and the next. Because every match is
+ * centered in a slot of height (unit * 2^round) and all columns share the same
+ * total height, match j of the next round sits exactly at the midpoint of
+ * feeders 2j and 2j+1 — the geometry here is exact, not approximated.
  */
 @Composable
 private fun BracketConnector(
-    fromMatchCount: Int,
-    toMatchCount: Int,
+    pairCount: Int,
+    fromSlotHeight: androidx.compose.ui.unit.Dp,
+    totalHeight: androidx.compose.ui.unit.Dp,
     color: Color
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val cardHeightPx    = with(density) { MATCH_CARD_HEIGHT.toPx() }
-    val matchVGapPx     = with(density) { MATCH_V_GAP.toPx() }
-    val labelHeightPx   = with(density) { BLOCK_LABEL_HEIGHT.toPx() }
-    val captionHeightPx = with(density) { BLOCK_CAPTION_HEIGHT.toPx() }
-    val labelGapPx      = with(density) { 6.dp.toPx() }
-    val captionGapPx    = with(density) { 4.dp.toPx() }
-    val connectorWidth  = with(density) { (ROUND_GAP / 2).toPx() }
-
-    // Each match occupies a "block": label + spacing, the card itself, then a caption
-    val blockHeightPx  = labelHeightPx + labelGapPx + cardHeightPx + captionGapPx + captionHeightPx
-    // The card's vertical center sits this far down from the top of its block
-    val cardCenterOffsetPx = labelHeightPx + labelGapPx + cardHeightPx / 2f
-
-    val totalH = fromMatchCount * blockHeightPx + (fromMatchCount - 1) * matchVGapPx
+    val slotPx = with(density) { fromSlotHeight.toPx() }
 
     Canvas(
         modifier = Modifier
             .width(ROUND_GAP)
-            .height(with(density) { totalH.toDp() })
+            .height(totalHeight)
     ) {
-        // Each pair of "from" cards connects to one "to" card
-        for (i in 0 until toMatchCount) {
-            val top    = i * 2       // top card in from-round
-            val bottom = i * 2 + 1  // bottom card in from-round
-
-            val topCenterY = top * (blockHeightPx + matchVGapPx) + cardCenterOffsetPx
-            val botCenterY = bottom * (blockHeightPx + matchVGapPx) + cardCenterOffsetPx
+        val midX = size.width / 2f
+        for (j in 0 until pairCount) {
+            val topCenterY = (2 * j) * slotPx + slotPx / 2f
+            val botCenterY = (2 * j + 1) * slotPx + slotPx / 2f
             val midY       = (topCenterY + botCenterY) / 2f
 
-            // Horizontal stub from top card
-            drawLine(
-                color       = color,
-                start       = Offset(0f, topCenterY),
-                end         = Offset(connectorWidth, topCenterY),
-                strokeWidth = 2f,
-                cap         = StrokeCap.Round
-            )
-            // Horizontal stub from bottom card
-            drawLine(
-                color       = color,
-                start       = Offset(0f, botCenterY),
-                end         = Offset(connectorWidth, botCenterY),
-                strokeWidth = 2f,
-                cap         = StrokeCap.Round
-            )
-            // Vertical bar joining them
-            drawLine(
-                color       = color,
-                start       = Offset(connectorWidth, topCenterY),
-                end         = Offset(connectorWidth, botCenterY),
-                strokeWidth = 2f,
-                cap         = StrokeCap.Round
-            )
-            // Horizontal line from mid point to next round
-            drawLine(
-                color       = color,
-                start       = Offset(connectorWidth, midY),
-                end         = Offset(size.width, midY),
-                strokeWidth = 2f,
-                cap         = StrokeCap.Round
-            )
+            drawLine(color, Offset(0f, topCenterY), Offset(midX, topCenterY), 2f, StrokeCap.Round)
+            drawLine(color, Offset(0f, botCenterY), Offset(midX, botCenterY), 2f, StrokeCap.Round)
+            drawLine(color, Offset(midX, topCenterY), Offset(midX, botCenterY), 2f, StrokeCap.Round)
+            drawLine(color, Offset(midX, midY), Offset(size.width, midY), 2f, StrokeCap.Round)
         }
     }
 }
@@ -809,7 +844,9 @@ private fun ScoreChip(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                if (isWinner && isCompleted) MaterialTheme.colorScheme.primary else SCORE_CHIP_DARK
+                // inverseSurface = high-contrast chip in both light and dark themes
+                if (isWinner && isCompleted) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.inverseSurface
             )
     ) {
         Text(
@@ -818,7 +855,7 @@ private fun ScoreChip(
             fontWeight = FontWeight.Bold,
             color = if (isWinner && isCompleted)
                 MaterialTheme.colorScheme.onPrimary
-            else Color.White.copy(alpha = if (score != null) 0.85f else 0.5f)
+            else MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = if (score != null) 0.85f else 0.5f)
         )
     }
 }
@@ -943,7 +980,7 @@ private fun StandingsTab(
 // ── Announcements tab ─────────────────────────────────────────────────────────
 
 @Composable
-private fun AnnouncementsTab(state: TournamentDetailUiState) {
+private fun NoticeTab(state: TournamentDetailUiState) {
     if (state.announcements.isEmpty()) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text("No announcements", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1009,16 +1046,14 @@ private fun ScoreEntryDialog(
         confirmButton = {
             Button(
                 onClick = onSubmit,
-                enabled = score1.toIntOrNull() != null && score2.toIntOrNull() != null,
-                shape = RoundedCornerShape(10.dp)
+                enabled = score1.toIntOrNull() != null && score2.toIntOrNull() != null
             ) {
                 Text("Submit")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        shape = RoundedCornerShape(16.dp)
+        }
     )
 }
 
@@ -1027,7 +1062,7 @@ private fun ScoreEntryDialog(
 private fun DetailTab.label() = when (this) {
     DetailTab.BRACKET       -> "Bracket"
     DetailTab.STANDINGS     -> "Standings"
-    DetailTab.ANNOUNCEMENTS -> "Announcements"
+    DetailTab.NOTICE        -> "Notice"
     DetailTab.PARTICIPANTS  -> "Participants"
 }
 
@@ -1044,7 +1079,7 @@ private fun ParticipantsTab(state: TournamentDetailUiState) {
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         if (state.organizers.isNotEmpty()) {
             item {
@@ -1053,16 +1088,18 @@ private fun ParticipantsTab(state: TournamentDetailUiState) {
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
             }
-            items(state.organizers, key = { "org_${it.id}" }) { organizer ->
+            itemsIndexed(state.organizers, key = { _, o -> "org_${o.id}" }) { index, organizer ->
                 ParticipantRow(
                     name = if (organizer.role == OrganizerRole.OWNER) "Owner" else "Organizer",
-                    subtitle = organizer.userId
+                    subtitle = organizer.userId,
+                    index = index,
+                    count = state.organizers.size
                 )
             }
-            item { Spacer(Modifier.height(8.dp)) }
+            item { Spacer(Modifier.height(16.dp)) }
         }
 
         item {
@@ -1071,7 +1108,7 @@ private fun ParticipantsTab(state: TournamentDetailUiState) {
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 4.dp)
+                modifier = Modifier.padding(bottom = 6.dp)
             )
         }
         if (state.teams.isEmpty()) {
@@ -1083,48 +1120,50 @@ private fun ParticipantsTab(state: TournamentDetailUiState) {
                 )
             }
         } else {
-            items(state.teams, key = { "team_${it.id}" }) { team ->
-                ParticipantRow(name = team.name, subtitle = if (team.seed != null) "Seed ${team.seed}" else null)
+            itemsIndexed(state.teams, key = { _, t -> "team_${t.id}" }) { index, team ->
+                ParticipantRow(
+                    name = team.name,
+                    subtitle = if (team.seed != null) "Seed ${team.seed}" else null,
+                    index = index,
+                    count = state.teams.size
+                )
             }
         }
     }
 }
 
+/**
+ * Display-only row. The multiplatform material3 build doesn't ship the non-interactive
+ * SegmentedListItem overload yet (androidx added it in 1.5.0-alpha23), so this uses the
+ * onClick overload with an inert lambda — drop it once the JetBrains fork catches up.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ParticipantRow(name: String, subtitle: String?) {
-    Card(shape = RoundedCornerShape(8.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+private fun ParticipantRow(name: String, subtitle: String?, index: Int, count: Int) {
+    SegmentedListItem(
+        onClick = {},
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        supportingContent = subtitle?.let { { Text(it) } }
+    ) {
+        Text(name, fontWeight = FontWeight.Medium)
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AccessListRow(
     viewer: com.kmp.setplay.domain.model.ShareViewer,
+    index: Int,
+    count: Int,
     onToggle: () -> Unit
 ) {
-    Card(shape = RoundedCornerShape(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    // No display-name profile yet — show a short, readable id fragment.
-                    "Viewer · ${viewer.userId.take(8)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    "Last viewed ${formatMatchSchedule(viewer.lastViewedAt)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+    SegmentedListItem(
+        onClick = {},
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        supportingContent = {
+            Text("Last viewed ${formatMatchSchedule(viewer.lastViewedAt)}")
+        },
+        trailingContent = {
             TextButton(onClick = onToggle) {
                 Text(
                     if (viewer.revoked) "Restore" else "Revoke",
@@ -1132,6 +1171,12 @@ private fun AccessListRow(
                 )
             }
         }
+    ) {
+        Text(
+            // No display-name profile yet — show a short, readable id fragment.
+            "Viewer · ${viewer.userId.take(8)}",
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

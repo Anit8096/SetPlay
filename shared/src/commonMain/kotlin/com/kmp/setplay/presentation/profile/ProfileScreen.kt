@@ -1,6 +1,5 @@
 package com.kmp.setplay.presentation.profile
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +23,14 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -51,6 +53,7 @@ import com.kmp.setplay.presentation.auth.AuthAction
 import com.kmp.setplay.presentation.common.ContentContainer
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ProfileScreen(
     onAuthAction: (AuthAction) -> Unit,
@@ -71,9 +74,6 @@ fun ProfileScreen(
         }
     }
 
-    // ProfileViewModel intentionally doesn't hold the auth write path — it signals back
-    // that the user confirmed, and the actual sign-out is dispatched to the root-scoped
-    // AuthViewModel, which is what NavGraph's auth gate is listening to.
     fun dispatch(action: ProfileAction) {
         if (vm.onAction(action)) {
             onAuthAction(AuthAction.SignOut)
@@ -97,7 +97,7 @@ fun ProfileScreen(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
 
                 user == null -> Box(
@@ -136,26 +136,33 @@ fun ProfileScreen(
 
                     SectionLabel("General")
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Material3 segmented list group — 2dp gaps between segments.
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         ProfileRow(
                             icon = Icons.Filled.Groups,
                             title = "Clubs & Teams",
                             subtitle = "Coming soon",
                             enabled = false,
-                            onClick = {}
+                            onClick = {},
+                            index = 0,
+                            count = 3
                         )
                         ProfileRow(
                             icon = Icons.Filled.Settings,
                             title = "Settings",
                             subtitle = "Theme, account, notifications",
-                            onClick = onOpenSettings
+                            onClick = onOpenSettings,
+                            index = 1,
+                            count = 3
                         )
                         ProfileRow(
                             icon = Icons.AutoMirrored.Filled.Logout,
                             title = "Sign out",
                             destructive = true,
                             showChevron = false,
-                            onClick = { dispatch(ProfileAction.SignOutClicked) }
+                            onClick = { dispatch(ProfileAction.SignOutClicked) },
+                            index = 2,
+                            count = 3
                         )
                     }
 
@@ -297,64 +304,54 @@ private fun SectionLabel(text: String) {
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ProfileRow(
     icon: ImageVector,
     title: String,
     onClick: () -> Unit,
+    index: Int,
+    count: Int,
     subtitle: String? = null,
     enabled: Boolean = true,
     destructive: Boolean = false,
     showChevron: Boolean = true
 ) {
-    val contentColor = when {
-        destructive -> MaterialTheme.colorScheme.error
-        enabled -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    // Disabled visuals (Clubs & Teams "coming soon") come from SegmentedListItem's own
+    // disabled color set — no manual alpha math needed anymore. Destructive rows just
+    // override the content + leading icon colors with error.
+    val colors = if (destructive) {
+        ListItemDefaults.segmentedColors(
+            contentColor = MaterialTheme.colorScheme.error,
+            leadingContentColor = MaterialTheme.colorScheme.error
+        )
+    } else {
+        ListItemDefaults.segmentedColors()
     }
 
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(16.dp)
-        ) {
+    SegmentedListItem(
+        onClick = onClick,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        enabled = enabled,
+        colors = colors,
+        leadingContent = {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = contentColor,
                 modifier = Modifier.size(22.dp)
             )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = contentColor
-                )
-                if (subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-                        else contentColor
-                    )
-                }
-            }
-            if (showChevron && enabled) {
+        },
+        supportingContent = subtitle?.let { { Text(it) } },
+        trailingContent = if (showChevron && enabled) {
+            {
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    contentDescription = null
                 )
             }
-        }
+        } else null
+    ) {
+        Text(title, fontWeight = FontWeight.Medium)
     }
 }
 

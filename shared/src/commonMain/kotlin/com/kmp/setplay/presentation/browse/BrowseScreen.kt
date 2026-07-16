@@ -1,12 +1,12 @@
 package com.kmp.setplay.presentation.browse
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,19 +18,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -47,12 +54,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.model.TournamentStatus
+import com.kmp.setplay.domain.repository.ParticipationSummary
 import com.kmp.setplay.presentation.common.ContentContainer
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
@@ -60,7 +70,7 @@ import org.koin.compose.viewmodel.koinViewModel
 expect fun isAndroidPlatform(): Boolean
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BrowseScreen(
     contentPadding: PaddingValues = PaddingValues(),
@@ -80,50 +90,57 @@ fun BrowseScreen(
         }
     }
 
+    val isCompactHeight = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.height.toDp()
+    } < 480.dp
+
     Scaffold(
         modifier = modifier.fillMaxSize().padding(contentPadding),
+        contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (uiState.selectedSubTab == BrowseSubTab.DISCOVER) {
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (isAndroidPlatform()) {
-                        // Stub — real QR scanning lands in Step 12 (ML Kit)
-                        SmallFloatingActionButton(
-                            onClick = {
-                                scope.launch { snackbarHostState.showSnackbar("QR scanning is coming soon") }
-                            }
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = "Scan QR to join")
+                DiscoverFabs(
+                    horizontal = isCompactHeight,
+                    onScanQr = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("QR scanning is coming soon")
                         }
-                    } else {
-                        // No touch-drag on Web/Desktop mouse, so pull-to-refresh can't be
-                        // triggered there — this is the Web equivalent.
-                        SmallFloatingActionButton(
-                            onClick = { viewModel.onAction(BrowseAction.Refresh) }
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                        }
-                    }
-                    ExtendedFloatingActionButton(
-                        onClick = onJoinTournament,
-                        icon = { Icon(Icons.Default.QrCodeScanner, contentDescription = null) },
-                        text = { Text("Join with code") }
-                    )
-                }
+                    },
+                    onRefresh = { viewModel.onAction(BrowseAction.Refresh) },
+                    onJoinWithCode = onJoinTournament
+                )
             }
         }
     ) { fabPadding ->
         ContentContainer(
             modifier = Modifier.fillMaxSize().padding(fabPadding)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                SecondaryTabRow(selectedTabIndex = uiState.selectedSubTab.ordinal) {
-                    BrowseSubTab.entries.forEach { tab ->
-                        Tab(
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Sub-tab selector. No leading check icon (icon = {}) — the selected
+                // container color already signals selection, and in narrow panes
+                // (landscape two-pane) the icon width is what forced labels like
+                // "Organizing" to wrap onto two lines.
+                SingleChoiceSegmentedButtonRow(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    BrowseSubTab.entries.forEachIndexed { index, tab ->
+                        SegmentedButton(
                             selected = uiState.selectedSubTab == tab,
                             onClick = { viewModel.onAction(BrowseAction.SubTabSelected(tab)) },
-                            text = { Text(tab.label()) }
-                        )
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = BrowseSubTab.entries.size
+                            ),
+                            icon = {}
+                        ) {
+                            Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
 
@@ -169,14 +186,57 @@ fun BrowseScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { viewModel.onAction(BrowseAction.DismissJoinDialog) }) { Text("Cancel") }
-                    },
-                    shape = RoundedCornerShape(16.dp)
+                    }
                 )
             }
         }
     }
 }
 
+@Composable
+private fun DiscoverFabs(
+    horizontal: Boolean,
+    onScanQr: () -> Unit,
+    onRefresh: () -> Unit,
+    onJoinWithCode: () -> Unit
+) {
+    val secondaryFab: @Composable () -> Unit = {
+        if (isAndroidPlatform()) {
+            SmallFloatingActionButton(onClick = onScanQr) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR to join")
+            }
+        } else {
+            SmallFloatingActionButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
+    }
+    val joinFab: @Composable () -> Unit = {
+        ExtendedFloatingActionButton(
+            onClick = onJoinWithCode
+        ) { Text("Join with code") }
+    }
+
+    if (horizontal) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            secondaryFab()
+            joinFab()
+        }
+    } else {
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            secondaryFab()
+            joinFab()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DiscoverContent(
     uiState: BrowseUiState,
@@ -192,87 +252,88 @@ private fun DiscoverContent(
         onRefresh = onRefresh,
         modifier = Modifier.fillMaxSize()
     ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                FilterChip(
-                    selected = uiState.statusFilter == null && uiState.formatFilter == null,
-                    onClick = onClearFilters,
-                    label = { Text("All") }
-                )
-            }
-            item {
-                FilterChip(
-                    selected = uiState.statusFilter == TournamentStatus.REGISTRATION,
-                    onClick = {
-                        onStatusFilter(
-                            if (uiState.statusFilter == TournamentStatus.REGISTRATION) null
-                            else TournamentStatus.REGISTRATION
-                        )
-                    },
-                    label = { Text("Open") }
-                )
-            }
-            item {
-                FilterChip(
-                    selected = uiState.statusFilter == TournamentStatus.IN_PROGRESS,
-                    onClick = {
-                        onStatusFilter(
-                            if (uiState.statusFilter == TournamentStatus.IN_PROGRESS) null
-                            else TournamentStatus.IN_PROGRESS
-                        )
-                    },
-                    label = { Text("In Progress") }
-                )
-            }
-            items(BracketFormat.entries.toList()) { format ->
-                FilterChip(
-                    selected = uiState.formatFilter == format,
-                    onClick = { onFormatFilter(if (uiState.formatFilter == format) null else format) },
-                    label = { Text(format.shortLabel()) }
-                )
-            }
-        }
-
-        when {
-            uiState.isLoading -> Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
-            ) { CircularProgressIndicator() }
-
-            filtered.isEmpty() -> Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize().padding(24.dp)
+        Column(modifier = Modifier.fillMaxSize()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    "No public tournaments right now — check back soon",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            else -> LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filtered, key = { it.id }) { tournament ->
-                    PublicJoinCard(
-                        tournament = tournament,
-                        summary = uiState.participation[tournament.id],
-                        isJoining = uiState.joiningTournamentId == tournament.id,
-                        onJoinClick = { onJoinClicked(tournament) }
+                item {
+                    FilterChip(
+                        selected = uiState.statusFilter == null && uiState.formatFilter == null,
+                        onClick = onClearFilters,
+                        label = { Text("All") }
                     )
+                }
+                item {
+                    FilterChip(
+                        selected = uiState.statusFilter == TournamentStatus.REGISTRATION,
+                        onClick = {
+                            onStatusFilter(
+                                if (uiState.statusFilter == TournamentStatus.REGISTRATION) null
+                                else TournamentStatus.REGISTRATION
+                            )
+                        },
+                        label = { Text("Open") }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = uiState.statusFilter == TournamentStatus.IN_PROGRESS,
+                        onClick = {
+                            onStatusFilter(
+                                if (uiState.statusFilter == TournamentStatus.IN_PROGRESS) null
+                                else TournamentStatus.IN_PROGRESS
+                            )
+                        },
+                        label = { Text("In Progress") }
+                    )
+                }
+                items(BracketFormat.entries.toList()) { format ->
+                    FilterChip(
+                        selected = uiState.formatFilter == format,
+                        onClick = { onFormatFilter(if (uiState.formatFilter == format) null else format) },
+                        label = { Text(format.shortLabel()) }
+                    )
+                }
+            }
+
+            when {
+                uiState.isLoading -> Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) { LoadingIndicator() }
+
+                filtered.isEmpty() -> Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize().padding(24.dp)
+                ) {
+                    Text(
+                        "No public tournaments right now — check back soon",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                else -> LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filtered, key = { it.id }) { tournament ->
+                        PublicJoinCard(
+                            tournament = tournament,
+                            summary = uiState.participation[tournament.id],
+                            isJoining = uiState.joiningTournamentId == tournament.id,
+                            onJoinClick = { onJoinClicked(tournament) }
+                        )
+                    }
                 }
             }
         }
     }
-    }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun OrganizingContent(
     isLoading: Boolean,
@@ -283,7 +344,7 @@ private fun OrganizingContent(
         isLoading -> Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.fillMaxSize()
-        ) { CircularProgressIndicator() }
+        ) { LoadingIndicator() }
 
         tournaments.isEmpty() -> Box(
             contentAlignment = Alignment.Center,
@@ -314,19 +375,14 @@ private fun OrganizingContent(
 @Composable
 private fun PublicJoinCard(
     tournament: Tournament,
-    summary: com.kmp.setplay.domain.repository.ParticipationSummary?,
+    summary: ParticipationSummary?,
     isJoining: Boolean,
     onJoinClick: () -> Unit
 ) {
     val hasJoined = summary?.hasJoined == true
     val count = summary?.participantCount ?: 0
 
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -374,8 +430,7 @@ private fun PublicJoinCard(
                 Button(
                     onClick = onJoinClick,
                     enabled = !hasJoined && !isJoining &&
-                        tournament.status == TournamentStatus.REGISTRATION,
-                    shape = RoundedCornerShape(10.dp)
+                        tournament.status == TournamentStatus.REGISTRATION
                 ) {
                     Text(if (hasJoined) "Joined" else "Join")
                 }
@@ -386,11 +441,8 @@ private fun PublicJoinCard(
 
 @Composable
 private fun DiscoverCard(tournament: Tournament, onClick: () -> Unit = {}) {
-    Surface(
+    OutlinedCard(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -431,7 +483,7 @@ private fun DiscoverCard(tournament: Tournament, onClick: () -> Unit = {}) {
 private fun StatusBadge(status: TournamentStatus) {
     val (label, color) = when (status) {
         TournamentStatus.REGISTRATION -> "OPEN" to MaterialTheme.colorScheme.primary
-        TournamentStatus.IN_PROGRESS  -> "LIVE" to Color(0xFFE53935)
+        TournamentStatus.IN_PROGRESS  -> "LIVE" to MaterialTheme.colorScheme.error
         TournamentStatus.COMPLETED    -> "DONE" to MaterialTheme.colorScheme.onSurfaceVariant
         TournamentStatus.DRAFT        -> "DRAFT" to MaterialTheme.colorScheme.onSurfaceVariant
     }

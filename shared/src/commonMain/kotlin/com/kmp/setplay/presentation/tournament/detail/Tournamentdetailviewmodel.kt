@@ -69,7 +69,7 @@ data class TournamentDetailUiState(
                 else listOf(DetailTab.BRACKET, DetailTab.STANDINGS)
 }
 
-enum class DetailTab { BRACKET, STANDINGS, ANNOUNCEMENTS, PARTICIPANTS }
+enum class DetailTab { BRACKET, STANDINGS, NOTICE, PARTICIPANTS }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 

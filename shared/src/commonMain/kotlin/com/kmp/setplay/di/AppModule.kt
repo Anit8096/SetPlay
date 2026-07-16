@@ -7,6 +7,7 @@ import com.kmp.setplay.domain.repository.AuthRepository
 import com.kmp.setplay.domain.repository.TournamentRepository
 import com.kmp.setplay.presentation.auth.AuthViewModel
 import com.kmp.setplay.presentation.browse.BrowseViewModel
+import com.kmp.setplay.presentation.history.HistoryViewModel
 import com.kmp.setplay.presentation.profile.ProfileViewModel
 import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailViewModel
@@ -27,6 +28,7 @@ val appModule = module {
 
     single { AuthViewModel(get()) }
     viewModel { BrowseViewModel(tournamentRepository = get(), authRepository = get()) }
+    viewModel { HistoryViewModel(tournamentRepository = get(), authRepository = get()) }
     viewModel { ProfileViewModel(authRepository = get()) }
     viewModel { CreateTournamentViewModel(get()) }
     viewModel { params ->
