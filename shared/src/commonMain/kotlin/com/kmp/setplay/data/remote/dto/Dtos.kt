@@ -90,6 +90,21 @@ data class RoundDto(
     )
 }
 
+// Used in: generateBracket — wraps the full bracket for the create_bracket
+// Postgres RPC, which persists rounds + matches + status flip in ONE
+// transaction (see supabase/create_bracket.sql).
+@Serializable
+data class CreateBracketPayload(
+    @SerialName("tournament_id") val tournamentId: String,
+    val rounds: List<RoundDto>,
+    val matches: List<MatchDto>
+)
+
+// PostgREST maps top-level keys to function argument names, so this wrapper
+// exists solely to name the single `payload` argument.
+@Serializable
+data class CreateBracketParams(val payload: CreateBracketPayload)
+
 // Used in: observeMatches, updateMatch, generateBracket,
 // Realtime insert/update handler
 @Serializable

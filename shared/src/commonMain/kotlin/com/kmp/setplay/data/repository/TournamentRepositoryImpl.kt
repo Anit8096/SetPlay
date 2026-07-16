@@ -3,8 +3,9 @@ package com.kmp.setplay.data.repository
 import com.kmp.setplay.data.local.LocalCache
 import com.kmp.setplay.data.remote.dto.AdvanceWinnerRequestDto
 import com.kmp.setplay.data.remote.dto.AnnouncementDto
+import com.kmp.setplay.data.remote.dto.CreateBracketParams
+import com.kmp.setplay.data.remote.dto.CreateBracketPayload
 import com.kmp.setplay.data.remote.dto.InsertTeamRequestDto
-import com.kmp.setplay.data.remote.dto.UpdateTeamRequestDto
 import com.kmp.setplay.data.remote.dto.InsertTournamentRequestDto
 import com.kmp.setplay.data.remote.dto.MatchDto
 import com.kmp.setplay.data.remote.dto.RecordShareViewRequestDto
@@ -17,6 +18,7 @@ import com.kmp.setplay.data.remote.dto.TournamentOrganizerDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchResultRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateMatchScheduleRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateShareViewerRequestDto
+import com.kmp.setplay.data.remote.dto.UpdateTeamRequestDto
 import com.kmp.setplay.data.remote.dto.UpdateTournamentRequestDto
 import com.kmp.setplay.domain.bracket.SingleEliminationGenerator
 import com.kmp.setplay.domain.model.Announcement
@@ -36,6 +38,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import io.github.jan.supabase.postgrest.rpc
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
@@ -47,7 +50,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Instant
@@ -352,43 +354,42 @@ class TournamentRepositoryImpl(
             includeThirdPlace = includeThirdPlace
         )
 
-        supabase.postgrest["rounds"].insert(
-            result.rounds.map { round ->
-                RoundDto(
-                    id = round.id,
-                    tournamentId = round.tournamentId,
-                    roundNumber = round.roundNumber,
-                    name = round.name
+        supabase.postgrest.rpc(
+            "create_bracket",
+            CreateBracketParams(
+                payload = CreateBracketPayload(
+                    tournamentId = tournamentId,
+                    rounds = result.rounds.map { round ->
+                        RoundDto(
+                            id = round.id,
+                            tournamentId = round.tournamentId,
+                            roundNumber = round.roundNumber,
+                            name = round.name
+                        )
+                    },
+                    matches = result.matches.map { match ->
+                        MatchDto(
+                            id = match.id,
+                            roundId = match.roundId,
+                            tournamentId = match.tournamentId,
+                            matchNumber = match.matchNumber,
+                            team1Id = match.team1Id,
+                            team2Id = match.team2Id,
+                            score1 = match.score1,
+                            score2 = match.score2,
+                            status = match.status,
+                            nextMatchId = match.nextMatchId,
+                            nextLoserMatchId = match.nextLoserMatchId,
+                            winnerId = match.winnerId,
+                            loserId = match.loserId
+                        )
+                    }
                 )
-            }
+            )
         )
+
         cache.saveRounds(result.rounds)
-
-        supabase.postgrest["matches"].insert(
-            result.matches.map { match ->
-                MatchDto(
-                    id = match.id,
-                    roundId = match.roundId,
-                    tournamentId = match.tournamentId,
-                    matchNumber = match.matchNumber,
-                    team1Id = match.team1Id,
-                    team2Id = match.team2Id,
-                    score1 = match.score1,
-                    score2 = match.score2,
-                    status = match.status,
-                    nextMatchId = match.nextMatchId,
-                    nextLoserMatchId = match.nextLoserMatchId,
-                    winnerId = match.winnerId,
-                    loserId = match.loserId
-                )
-            }
-        )
         cache.saveMatches(result.matches)
-
-        supabase.postgrest["tournaments"]
-            .update(mapOf("status" to TournamentStatus.IN_PROGRESS.name)) {
-                filter { eq("id", tournamentId) }
-            }
     }
 
     override suspend fun updateMatch(
