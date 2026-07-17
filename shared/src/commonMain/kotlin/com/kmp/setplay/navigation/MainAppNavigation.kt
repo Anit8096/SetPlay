@@ -65,8 +65,8 @@ import com.kmp.setplay.presentation.tournament.create.CreateTournamentViewModel
 import com.kmp.setplay.presentation.tournament.create.createTournamentTopBarTitle
 import com.kmp.setplay.presentation.tournament.create.onCreateTournamentBack
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailScreen
-import com.kmp.setplay.presentation.tournament.detail.TournamentDetailTopBarActions
 import com.kmp.setplay.presentation.tournament.detail.TournamentDetailViewModel
+import com.kmp.setplay.presentation.tournament.detail.components.TournamentDetailTopBarActions
 import com.kmp.setplay.presentation.tournament.join.JoinTournamentScreen
 import com.kmp.setplay.presentation.tournament.join.JoinTournamentViewModel
 import kotlinx.serialization.ExperimentalSerializationApi
