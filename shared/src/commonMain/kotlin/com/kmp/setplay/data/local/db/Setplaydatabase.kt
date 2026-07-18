@@ -56,10 +56,6 @@ abstract class SetPlayDatabase : RoomDatabase() {
     abstract fun deviceTokenDao(): DeviceTokenDao
 }
 
-/**
- * expect object required by Room KMP for code generation.
- * The actual implementations are empty — Room generates the body.
- */
 @Suppress("NO_ACTUAL_FOR_EXPECT", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 expect object SetPlayDatabaseConstructor : RoomDatabaseConstructor<SetPlayDatabase> {
     override fun initialize(): SetPlayDatabase

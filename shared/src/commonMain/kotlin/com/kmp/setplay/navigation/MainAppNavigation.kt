@@ -19,16 +19,18 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
@@ -111,7 +113,11 @@ private enum class BottomNavBarTabs(
     PROFILE(Icons.Filled.AccountCircle, Icons.Outlined.AccountCircle, "Profile", "Profile"),
 }
 
-@OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalComposeUiApi::class)
+@OptIn(
+    ExperimentalMaterial3AdaptiveApi::class,
+    ExperimentalComposeUiApi::class,
+    ExperimentalMaterial3ExpressiveApi::class
+)
 @Composable
 fun MainAppNavigation(
     authState: AuthUiState,
@@ -166,7 +172,29 @@ fun MainAppNavigation(
     @Suppress("DEPRECATION")
     BackHandler(enabled = canHandleBack) { handleBack() }
 
-    Scaffold(
+
+    NavigationSuiteScaffold(
+        navigationSuiteItems = {
+            BottomNavBarTabs.entries.forEach { tab ->
+                item(
+                    selected = selectedTab == tab,
+                    onClick = { selectTab(tab) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selectedTab == tab) tab.selectedIcon
+                            else tab.unselectedIcon,
+                            contentDescription = tab.label
+                        )
+                    },
+                    label = { Text(tab.label) }
+                )
+            }
+        },
+        layoutType = NavigationSuiteScaffoldDefaults
+            .navigationSuiteType(currentWindowAdaptiveInfoV2())
+    ) {
+        Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             if (activeBackStack.size <= 1) {
                 TopAppBar(
@@ -200,24 +228,6 @@ fun MainAppNavigation(
                     )
                 )
             }
-        },
-        bottomBar = {
-            NavigationBar {
-                BottomNavBarTabs.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectTab(tab) },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == tab) tab.selectedIcon
-                                else tab.unselectedIcon,
-                                contentDescription = tab.label
-                            )
-                        },
-                        label = { Text(tab.label) }
-                    )
-                }
-            }
         }
     ) { innerPadding ->
         val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
@@ -235,7 +245,7 @@ fun MainAppNavigation(
                 if (tabDirection >= 0) {
                     slideInHorizontally(initialOffsetX = { it })
                         .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
-                } else {
+                } else { 
                     slideInHorizontally(initialOffsetX = { -it })
                         .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
                 }
@@ -426,5 +436,6 @@ fun MainAppNavigation(
                 }
             }
         )
+    }
     }
 }

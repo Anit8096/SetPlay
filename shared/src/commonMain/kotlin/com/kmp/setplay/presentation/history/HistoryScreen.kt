@@ -16,11 +16,10 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SegmentedListItem
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,23 +53,18 @@ fun HistoryScreen(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            SingleChoiceSegmentedButtonRow(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            PrimaryTabRow(
+                selectedTabIndex = uiState.selectedSubTab.ordinal,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                HistorySubTab.entries.forEachIndexed { index, tab ->
-                    SegmentedButton(
+                HistorySubTab.entries.forEach { tab ->
+                    Tab(
                         selected = uiState.selectedSubTab == tab,
                         onClick = { viewModel.onAction(HistoryAction.SubTabSelected(tab)) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = HistorySubTab.entries.size
-                        ),
-                        icon = {}
-                    ) {
-                        Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                        text = {
+                            Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    )
                 }
             }
 

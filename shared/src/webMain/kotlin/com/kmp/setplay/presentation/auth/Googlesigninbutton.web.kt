@@ -3,8 +3,8 @@ package com.kmp.setplay.presentation.auth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -84,7 +84,7 @@ actual fun GoogleSignInButton(
         modifier = modifier
     ) {
         AnimatedVisibility(isLoading) {
-            CircularWavyProgressIndicator(
+            LoadingIndicator(
                 modifier = Modifier
                     .size(16.dp)
                     .padding(end = 8.dp)

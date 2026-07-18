@@ -1,5 +1,6 @@
 package com.kmp.setplay.presentation.browse
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,48 +18,55 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButtonMenu
+import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleFloatingActionButton
+import androidx.compose.material3.ToggleFloatingActionButtonDefaults
+import androidx.compose.material3.ToggleFloatingActionButtonDefaults.animateIcon
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.window.core.layout.WindowSizeClass
 import com.kmp.setplay.domain.model.BracketFormat
 import com.kmp.setplay.domain.model.Tournament
 import com.kmp.setplay.domain.model.TournamentStatus
@@ -90,9 +98,9 @@ fun BrowseScreen(
         }
     }
 
-    val isCompactHeight = with(LocalDensity.current) {
-        LocalWindowInfo.current.containerSize.height.toDp()
-    } < 480.dp
+    // Large / extra-large windows get a bigger FAB and wider (24dp) margins per M3.
+    val isExpandedWindow = currentWindowAdaptiveInfoV2().windowSizeClass
+        .isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND)
 
     Scaffold(
         modifier = modifier.fillMaxSize().padding(contentPadding),
@@ -100,8 +108,8 @@ fun BrowseScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (uiState.selectedSubTab == BrowseSubTab.DISCOVER) {
-                DiscoverFabs(
-                    horizontal = isCompactHeight,
+                DiscoverFabMenu(
+                    expandedWindow = isExpandedWindow,
                     onScanQr = {
                         scope.launch {
                             snackbarHostState.showSnackbar("QR scanning is coming soon")
@@ -120,27 +128,18 @@ fun BrowseScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Sub-tab selector. No leading check icon (icon = {}) — the selected
-                // container color already signals selection, and in narrow panes
-                // (landscape two-pane) the icon width is what forced labels like
-                // "Organizing" to wrap onto two lines.
-                SingleChoiceSegmentedButtonRow(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                PrimaryTabRow(
+                    selectedTabIndex = uiState.selectedSubTab.ordinal,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    BrowseSubTab.entries.forEachIndexed { index, tab ->
-                        SegmentedButton(
+                    BrowseSubTab.entries.forEach { tab ->
+                        Tab(
                             selected = uiState.selectedSubTab == tab,
                             onClick = { viewModel.onAction(BrowseAction.SubTabSelected(tab)) },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = BrowseSubTab.entries.size
-                            ),
-                            icon = {}
-                        ) {
-                            Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+                            text = {
+                                Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        )
                     }
                 }
 
@@ -193,46 +192,67 @@ fun BrowseScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun DiscoverFabs(
-    horizontal: Boolean,
+private fun DiscoverFabMenu(
+    expandedWindow: Boolean,
     onScanQr: () -> Unit,
     onRefresh: () -> Unit,
     onJoinWithCode: () -> Unit
 ) {
-    val secondaryFab: @Composable () -> Unit = {
-        if (isAndroidPlatform()) {
-            SmallFloatingActionButton(onClick = onScanQr) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR to join")
-            }
-        } else {
-            SmallFloatingActionButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-            }
-        }
-    }
-    val joinFab: @Composable () -> Unit = {
-        ExtendedFloatingActionButton(
-            onClick = onJoinWithCode
-        ) { Text("Join with code") }
-    }
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    // Android surfaces QR scanning; other platforms fall back to a manual refresh.
+    val secondaryIsScan = isAndroidPlatform()
 
-    if (horizontal) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            secondaryFab()
-            joinFab()
+    FloatingActionButtonMenu(
+        expanded = menuExpanded,
+        // Bumps the trailing/bottom margin from the Scaffold's 16dp to 24dp on large windows.
+        modifier = if (expandedWindow) Modifier.padding(8.dp) else Modifier,
+        button = {
+            ToggleFloatingActionButton(
+                checked = menuExpanded,
+                onCheckedChange = { menuExpanded = it },
+                containerSize = if (expandedWindow) {
+                    ToggleFloatingActionButtonDefaults.containerSizeMedium()
+                } else {
+                    ToggleFloatingActionButtonDefaults.containerSize()
+                }
+            ) {
+                // The FAB icon morphs from "add" into a close button as the menu opens.
+                val fabIcon by remember {
+                    derivedStateOf {
+                        if (checkedProgress > 0.5f) Icons.Filled.Close else Icons.Filled.Add
+                    }
+                }
+                Icon(
+                    painter = rememberVectorPainter(fabIcon),
+                    contentDescription = if (menuExpanded) "Close actions" else "More actions",
+                    modifier = Modifier.animateIcon({ checkedProgress })
+                )
+            }
         }
-    } else {
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            secondaryFab()
-            joinFab()
-        }
+    ) {
+        FloatingActionButtonMenuItem(
+            onClick = {
+                menuExpanded = false
+                if (secondaryIsScan) onScanQr() else onRefresh()
+            },
+            icon = {
+                Icon(
+                    if (secondaryIsScan) Icons.Default.QrCodeScanner else Icons.Default.Refresh,
+                    contentDescription = null
+                )
+            },
+            text = { Text(if (secondaryIsScan) "Scan QR" else "Refresh") }
+        )
+        FloatingActionButtonMenuItem(
+            onClick = {
+                menuExpanded = false
+                onJoinWithCode()
+            },
+            icon = { Icon(Icons.Default.Key, contentDescription = null) },
+            text = { Text("Join with code") }
+        )
     }
 }
 
@@ -247,10 +267,21 @@ private fun DiscoverContent(
     onRefresh: () -> Unit,
     onJoinClicked: (Tournament) -> Unit
 ) {
+    val pullState = rememberPullToRefreshState()
     PullToRefreshBox(
+        state = pullState,
         isRefreshing = uiState.isRefreshing,
         onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        indicator = {
+            PullToRefreshDefaults.LoadingIndicator(
+                state = pullState,
+                isRefreshing = uiState.isRefreshing,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             LazyRow(

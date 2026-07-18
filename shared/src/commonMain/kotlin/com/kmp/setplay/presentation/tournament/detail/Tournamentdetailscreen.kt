@@ -16,11 +16,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -131,18 +130,18 @@ private fun TournamentDetailTabs(
         modifier = Modifier.fillMaxSize().padding(contentPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        SingleChoiceSegmentedButtonRow(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+        PrimaryTabRow(
+            selectedTabIndex = availableTabs.indexOf(activeTab),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            availableTabs.forEachIndexed { index, tab ->
-                SegmentedButton(
+            availableTabs.forEach { tab ->
+                Tab(
                     selected = activeTab == tab,
                     onClick = { onAction(TournamentDetailAction.TabSelected(tab)) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = availableTabs.size),
-                    icon = {}
-                ) {
-                    Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                    text = {
+                        Text(tab.label(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                )
             }
         }
 
