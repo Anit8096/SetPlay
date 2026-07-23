@@ -9,19 +9,28 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MenuOpen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconButtonShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,6 +42,8 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteItem
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -47,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -55,6 +67,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
+import androidx.window.core.layout.WindowWidthSizeClass
 import com.kmp.setplay.presentation.auth.AuthAction
 import com.kmp.setplay.presentation.auth.AuthUiState
 import com.kmp.setplay.presentation.browse.BrowseScreen
@@ -76,13 +89,6 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-
-private data class TopBarSpec(
-    val title: String,
-    val showBackButton: Boolean = true,
-    val onBackClick: () -> Unit,
-    val actions: @Composable RowScope.() -> Unit = {}
-)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val mainAppSavedStateConfiguration = SavedStateConfiguration {
@@ -125,7 +131,8 @@ fun MainAppNavigation(
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(BottomNavBarTabs.HOME) }
     var tabDirection by remember { mutableStateOf(1) }
-    var topBarSpec by remember { mutableStateOf<TopBarSpec?>(null) }
+    var isRailExpanded by rememberSaveable { mutableStateOf(false) }
+
 
     val homeBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Home)
     val browseBackStack = rememberNavBackStack(configuration = mainAppSavedStateConfiguration, Route.MainApp.Tabs.Browse)
@@ -168,13 +175,50 @@ fun MainAppNavigation(
         }
     }
 
-    val canHandleBack = activeBackStack.size > 1 || selectedTab != BottomNavBarTabs.HOME
     @Suppress("DEPRECATION")
-    BackHandler(enabled = canHandleBack) { handleBack() }
+    BackHandler(
+        enabled = activeBackStack.size > 1 || selectedTab != BottomNavBarTabs.HOME
+    ) {
+        handleBack()
+    }
 
+
+    val adaptiveInfo = currentWindowAdaptiveInfoV2()
+    val customLayoutType = when {
+        adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(840) -> {
+            if (isRailExpanded) {
+                NavigationSuiteType.WideNavigationRailExpanded
+            } else {
+                NavigationSuiteType.WideNavigationRailCollapsed
+            }
+        }
+        adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(600) ->
+            NavigationSuiteType.ShortNavigationBarMedium
+        else ->
+            NavigationSuiteType.ShortNavigationBarCompact
+    }
 
     NavigationSuiteScaffold(
+        layoutType = customLayoutType,
         navigationSuiteItems = {
+            if (adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(840)) {
+                item(
+                    selected = false,
+                    onClick = { isRailExpanded = !isRailExpanded },
+                    icon = {
+                        FilledIconButton(
+                            onClick = { isRailExpanded = !isRailExpanded },
+                            shapes = IconButtonShapes(RoundedCornerShape(12.dp))
+                        ) {
+                            Icon(
+                                imageVector = if (isRailExpanded) Icons.Filled.Close else Icons.Filled.Menu,
+                                contentDescription = if (isRailExpanded) "Collapse Rail" else "Expand Rail"
+                            )
+                        }
+                    }
+                )
+            }
+
             BottomNavBarTabs.entries.forEach { tab ->
                 item(
                     selected = selectedTab == tab,
@@ -190,13 +234,11 @@ fun MainAppNavigation(
                 )
             }
         },
-        layoutType = NavigationSuiteScaffoldDefaults
-            .navigationSuiteType(currentWindowAdaptiveInfoV2())
+
     ) {
         Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            if (activeBackStack.size <= 1) {
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
                 TopAppBar(
                     title = {
                         Text(
@@ -205,237 +247,191 @@ fun MainAppNavigation(
                             fontWeight = FontWeight.Bold
                         )
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    )
-                )
-            } else {
-                val spec = topBarSpec
-                TopAppBar(
-                    title = {
-                        Text(spec?.title.orEmpty(), fontWeight = FontWeight.SemiBold)
-                    },
                     navigationIcon = {
-                        if (spec?.showBackButton != false) {
-                            IconButton(onClick = { spec?.onBackClick?.invoke() ?: pop() }) {
+                        if (activeBackStack.size > 1) {
+                            IconButton(
+                                onClick = { handleBack() }
+                            ) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         }
-                    },
-                    actions = { spec?.actions?.invoke(this) },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
-                    )
+                    }
                 )
             }
-        }
-    ) { innerPadding ->
-        val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
+        ) { innerPadding ->
+            val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
 
-        NavDisplay(
-            modifier = Modifier.fillMaxSize().consumeWindowInsets(innerPadding),
-            entryDecorators = listOf(
-                rememberSaveableStateHolderNavEntryDecorator(),
-                rememberViewModelStoreNavEntryDecorator()
-            ),
-            backStack = activeBackStack,
-            sceneStrategies = remember(listDetailStrategy) { listOf(listDetailStrategy) },
-            onBack = { pop() },
-            transitionSpec = {
-                if (tabDirection >= 0) {
-                    slideInHorizontally(initialOffsetX = { it })
-                        .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
-                } else { 
+            NavDisplay(
+                modifier = Modifier.fillMaxSize().consumeWindowInsets(innerPadding),
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator()
+                ),
+                backStack = activeBackStack,
+                sceneStrategies = remember(listDetailStrategy) { listOf(listDetailStrategy) },
+                onBack = { pop() },
+                transitionSpec = {
+                    if (tabDirection >= 0) {
+                        slideInHorizontally(initialOffsetX = { it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                    } else {
+                        slideInHorizontally(initialOffsetX = { -it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                    }
+                },
+                popTransitionSpec = {
+                    if (tabDirection >= 0) {
+                        slideInHorizontally(initialOffsetX = { it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
+                    } else {
+                        slideInHorizontally(initialOffsetX = { -it })
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
+                    }
+                },
+                predictivePopTransitionSpec = {
                     slideInHorizontally(initialOffsetX = { -it })
                         .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
-                }
-            },
-            popTransitionSpec = {
-                if (tabDirection >= 0) {
-                    slideInHorizontally(initialOffsetX = { it })
-                        .togetherWith(slideOutHorizontally(targetOffsetX = { -it }))
-                } else {
-                    slideInHorizontally(initialOffsetX = { -it })
-                        .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
-                }
-            },
-            predictivePopTransitionSpec = {
-                slideInHorizontally(initialOffsetX = { -it })
-                    .togetherWith(slideOutHorizontally(targetOffsetX = { it }))
-            },
-            entryProvider = entryProvider {
+                },
+                entryProvider = entryProvider {
 
-                // Home Tab
-                entry<Route.MainApp.Tabs.Home>(
-                    metadata = ListDetailSceneStrategy.listPane()
-                ) {
-                    HomeScreen(
-                        onFormatSelected = { format ->
-                            push(Route.MainApp.CreateTournament(format))
-                        },
-                        isAnonymous = authState.isAnonymous,
-                        onLinkGoogle = { onAuthAction(AuthAction.LinkGoogle) },
-                        contentPadding = innerPadding
-                    )
-                }
+                    // Home Tab
+                    entry<Route.MainApp.Tabs.Home>(
+                        metadata = ListDetailSceneStrategy.listPane()
+                    ) {
+                        HomeScreen(
+                            onFormatSelected = { format ->
+                                push(Route.MainApp.CreateTournament(format))
+                            },
+                            isAnonymous = authState.isAnonymous,
+                            onLinkGoogle = { onAuthAction(AuthAction.LinkGoogle) },
+                            contentPadding = innerPadding
+                        )
+                    }
 
-                // Browse tab
-                entry<Route.MainApp.Tabs.Browse>(
-                    metadata = ListDetailSceneStrategy.listPane(
-                        detailPlaceholder = {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Text(
-                                    "Select a tournament to see its details",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Browse tab
+                    entry<Route.MainApp.Tabs.Browse>(
+                        metadata = ListDetailSceneStrategy.listPane(
+                            detailPlaceholder = {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Text(
+                                        "Select a tournament to see its details",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        )
+                    ) {
+                        BrowseScreen(
+                            contentPadding = innerPadding,
+                            onTournamentSelected = { tournamentId ->
+                                push(Route.MainApp.TournamentDetail(tournamentId))
+                            },
+                            onJoinTournament = { push(Route.MainApp.JoinTournament()) }
+                        )
+                    }
+
+                    // History Tab
+                    entry<Route.MainApp.Tabs.History>(
+                        metadata = ListDetailSceneStrategy.listPane()
+                    ) {
+                        HistoryScreen(
+                            contentPadding = innerPadding,
+                            onTournamentSelected = { tournamentId ->
+                                push(Route.MainApp.TournamentDetail(tournamentId))
+                            }
+                        )
+                    }
+
+                    // Profile Tab
+                    entry<Route.MainApp.Tabs.Profile> {
+                        ProfileScreen(
+                            onAuthAction = onAuthAction,
+                            onOpenSettings = { push(Route.MainApp.Settings) },
+                            contentPadding = innerPadding
+                        )
+                    }
+
+                    entry<Route.MainApp.Settings> {
+                        SettingsScreen(contentPadding = innerPadding)
+                    }
+
+                    // Additional Routes accessible through Tab Screens
+                    entry<Route.MainApp.TournamentDetail>(
+                        metadata = ListDetailSceneStrategy.detailPane() +
+                                ListDetailSceneStrategy.paneAnimation(
+                                    slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                    slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
                                 )
-                            }
+                    ) { route ->
+                        val vm: TournamentDetailViewModel = koinViewModel(
+                            parameters = { parametersOf(route.tournamentId) }
+                        )
+                        val state by vm.uiState.collectAsStateWithLifecycle()
+                        TournamentDetailScreen(
+                            state = state,
+                            onAction = vm::onAction,
+                            onBack = { pop() },
+                            contentPadding = innerPadding
+                        )
+                    }
+
+                    entry<Route.MainApp.CreateTournament>(
+                        metadata = ListDetailSceneStrategy.detailPane() +
+                                ListDetailSceneStrategy.paneAnimation(
+                                    slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                    slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                                )
+                    ) { route ->
+                        val vm: CreateTournamentViewModel = koinViewModel()
+
+                        LaunchedEffect(route.format) {
+                            vm.initFormat(route.format)
                         }
-                    )
-                ) {
-                    BrowseScreen(
-                        contentPadding = innerPadding,
-                        onTournamentSelected = { tournamentId ->
-                            push(Route.MainApp.TournamentDetail(tournamentId))
-                        },
-                        onJoinTournament = { push(Route.MainApp.JoinTournament()) }
-                    )
-                }
 
-                // History Tab
-                entry<Route.MainApp.Tabs.History>(
-                    metadata = ListDetailSceneStrategy.listPane()
-                ) {
-                    HistoryScreen(
-                        contentPadding = innerPadding,
-                        onTournamentSelected = { tournamentId ->
-                            push(Route.MainApp.TournamentDetail(tournamentId))
-                        }
-                    )
-                }
+                        val state by vm.uiState.collectAsStateWithLifecycle()
 
-                // Profile Tab
-                entry<Route.MainApp.Tabs.Profile> {
-                    ProfileScreen(
-                        onAuthAction = onAuthAction,
-                        onOpenSettings = { push(Route.MainApp.Settings) },
-                        contentPadding = innerPadding
-                    )
-                }
-
-                entry<Route.MainApp.Settings> {
-                    SideEffect {
-                        topBarSpec = TopBarSpec(
-                            title = "Settings",
-                            onBackClick = { pop() }
+                        CreateTournamentScreen(
+                            state = state,
+                            onAction = vm::onAction,
+                            onCreated = { tournament ->
+                                tabDirection = 1
+                                activeBackStack.removeLastOrNull()
+                                activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
+                            },
+                            onBack = { pop() },
+                            contentPadding = innerPadding
                         )
                     }
 
-                    SettingsScreen(contentPadding = innerPadding)
-                }
-
-                // Additional Routes accessible through Tab Screens
-                entry<Route.MainApp.TournamentDetail>(
-                    metadata = ListDetailSceneStrategy.detailPane() +
-                            ListDetailSceneStrategy.paneAnimation(
-                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-                            )
-                ) { route ->
-                    val vm: TournamentDetailViewModel = koinViewModel(
-                        parameters = { parametersOf(route.tournamentId) }
-                    )
-                    val state by vm.uiState.collectAsStateWithLifecycle()
-
-                    SideEffect {
-                        topBarSpec = TopBarSpec(
-                            title = state.tournament?.name ?: "Tournament",
-                            onBackClick = { pop() },
-                            actions = { TournamentDetailTopBarActions(state, vm::onAction) }
+                    entry<Route.MainApp.JoinTournament>(
+                        metadata = ListDetailSceneStrategy.detailPane() +
+                                ListDetailSceneStrategy.paneAnimation(
+                                    slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                    slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                                )
+                    ) { route ->
+                        val vm: JoinTournamentViewModel = koinViewModel(
+                            parameters = { parametersOf(route.inviteCode) }
+                        )
+                        val state by vm.uiState.collectAsStateWithLifecycle()
+                        JoinTournamentScreen(
+                            state = state,
+                            onAction = vm::onAction,
+                            onTournamentFound = { tournament ->
+                                tabDirection = 1
+                                activeBackStack.removeLastOrNull()
+                                activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
+                            },
+                            onBack = { pop() },
+                            contentPadding = innerPadding
                         )
                     }
-
-                    TournamentDetailScreen(
-                        state = state,
-                        onAction = vm::onAction,
-                        onBack = { pop() },
-                        contentPadding = innerPadding
-                    )
                 }
-
-                entry<Route.MainApp.CreateTournament>(
-                    metadata = ListDetailSceneStrategy.detailPane() +
-                            ListDetailSceneStrategy.paneAnimation(
-                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-                            )
-                ) { route ->
-                    val vm: CreateTournamentViewModel = koinViewModel()
-
-                    LaunchedEffect(route.format) {
-                        vm.initFormat(route.format)
-                    }
-
-                    val state by vm.uiState.collectAsStateWithLifecycle()
-
-                    SideEffect {
-                        topBarSpec = TopBarSpec(
-                            title = createTournamentTopBarTitle(state),
-                            onBackClick = {
-                                onCreateTournamentBack(state, vm::onAction) { pop() }
-                            }
-                        )
-                    }
-
-                    CreateTournamentScreen(
-                        state = state,
-                        onAction = vm::onAction,
-                        onCreated = { tournament ->
-                            tabDirection = 1
-                            activeBackStack.removeLastOrNull()
-                            activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
-                        },
-                        onBack = { pop() },
-                        contentPadding = innerPadding
-                    )
-                }
-
-                entry<Route.MainApp.JoinTournament>(
-                    metadata = ListDetailSceneStrategy.detailPane() +
-                            ListDetailSceneStrategy.paneAnimation(
-                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-                            )
-                ) { route ->
-                    val vm: JoinTournamentViewModel = koinViewModel(
-                        parameters = { parametersOf(route.inviteCode) }
-                    )
-                    val state by vm.uiState.collectAsStateWithLifecycle()
-
-                    SideEffect {
-                        topBarSpec = TopBarSpec(
-                            title = "Join Tournament",
-                            onBackClick = { pop() }
-                        )
-                    }
-
-                    JoinTournamentScreen(
-                        state = state,
-                        onAction = vm::onAction,
-                        onTournamentFound = { tournament ->
-                            tabDirection = 1
-                            activeBackStack.removeLastOrNull()
-                            activeBackStack.add(Route.MainApp.TournamentDetail(tournament.id))
-                        },
-                        onBack = { pop() },
-                        contentPadding = innerPadding
-                    )
-                }
-            }
-        )
-    }
+            )
+        }
     }
 }
