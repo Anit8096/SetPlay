@@ -7,12 +7,19 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -24,6 +31,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -44,6 +52,7 @@ import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteItem
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
+import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -56,6 +65,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.focus.focusModifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -182,51 +192,24 @@ fun MainAppNavigation(
         handleBack()
     }
 
-
-    val adaptiveInfo = currentWindowAdaptiveInfoV2()
-    val customLayoutType = when {
-        adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(840) -> {
-            if (isRailExpanded) {
-                NavigationSuiteType.WideNavigationRailExpanded
-            } else {
-                NavigationSuiteType.WideNavigationRailCollapsed
-            }
-        }
-        adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(600) ->
-            NavigationSuiteType.ShortNavigationBarMedium
-        else ->
-            NavigationSuiteType.ShortNavigationBarCompact
+    val widthDp = currentWindowAdaptiveInfoV2().windowSizeClass.minWidthDp
+    val suiteType = when {
+        widthDp >= 900 -> if (isRailExpanded) NavigationSuiteType.WideNavigationRailExpanded
+        else NavigationSuiteType.WideNavigationRailCollapsed
+        widthDp >= 600 -> NavigationSuiteType.ShortNavigationBarMedium
+        else -> NavigationSuiteType.ShortNavigationBarCompact
     }
 
     NavigationSuiteScaffold(
-        layoutType = customLayoutType,
-        navigationSuiteItems = {
-            if (adaptiveInfo.windowSizeClass.isWidthAtLeastBreakpoint(840)) {
-                item(
-                    selected = false,
-                    onClick = { isRailExpanded = !isRailExpanded },
-                    icon = {
-                        FilledIconButton(
-                            onClick = { isRailExpanded = !isRailExpanded },
-                            shapes = IconButtonShapes(RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(
-                                imageVector = if (isRailExpanded) Icons.Filled.Close else Icons.Filled.Menu,
-                                contentDescription = if (isRailExpanded) "Collapse Rail" else "Expand Rail"
-                            )
-                        }
-                    }
-                )
-            }
-
+        navigationItems = {
             BottomNavBarTabs.entries.forEach { tab ->
-                item(
+                NavigationSuiteItem(
+                    navigationSuiteType = suiteType,
                     selected = selectedTab == tab,
                     onClick = { selectTab(tab) },
                     icon = {
                         Icon(
-                            imageVector = if (selectedTab == tab) tab.selectedIcon
-                            else tab.unselectedIcon,
+                            if (selectedTab == tab) tab.selectedIcon else tab.unselectedIcon,
                             contentDescription = tab.label
                         )
                     },
@@ -234,7 +217,25 @@ fun MainAppNavigation(
                 )
             }
         },
-
+        navigationSuiteType = suiteType,
+        state = rememberNavigationSuiteScaffoldState(),
+        primaryActionContent = {
+            if (suiteType == NavigationSuiteType.WideNavigationRailExpanded ||
+                suiteType == NavigationSuiteType.WideNavigationRailCollapsed) {
+                FilledIconButton(
+                    modifier = Modifier
+                        .fillMaxWidth(if (suiteType == NavigationSuiteType.WideNavigationRailExpanded) .3f else .2f)
+                        .padding(start = 20.dp),
+                    onClick = { isRailExpanded = !isRailExpanded }
+                ) {
+                    Icon(
+                        if (isRailExpanded) Icons.AutoMirrored.Filled.MenuOpen else Icons.Filled.Menu,
+                        contentDescription = if (isRailExpanded) "Collapse rail" else "Expand rail"
+                    )
+                }
+            }
+        },
+        primaryActionContentHorizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
